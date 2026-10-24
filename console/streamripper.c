@@ -65,6 +65,7 @@ static BOOL			m_alldone = FALSE;
 static BOOL			m_got_sig = FALSE;
 static BOOL			m_dont_print = FALSE;
 static BOOL			m_print_stderr = FALSE;
+static int                      m_exit_code = EXIT_SUCCESS;
 time_t				m_stop_time = 0;
 
 /* main()
@@ -132,7 +133,7 @@ main (int argc, char *argv[])
     g_strfreev(argv);
 #endif
 
-    return 0;
+    return m_exit_code;
 }
 
 void
@@ -265,6 +266,7 @@ rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data)
 	break;
     case RM_ERROR:
 	err = (ERROR_INFO*)data;
+        if (err->error_code == SR_ERROR_OUTPUT_DIRECTORY_LOCKED) m_exit_code = EXIT_FAILURE;
 	fprintf(stderr, "\nerror %d [%s]\n", err->error_code, err->error_str);
 	m_alldone = TRUE;
 	break;

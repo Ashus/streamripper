@@ -13,6 +13,8 @@ python testing\package_smoke.py "%SR_TOOLCHAIN%"
 if errorlevel 1 goto failed
 python testing\sequence_number.py
 if errorlevel 1 goto failed
+python testing\recording_lock.py
+if errorlevel 1 goto failed
 python testing\metadata_filter.py
 if errorlevel 1 goto failed
 python testing\metadata_encoding.py

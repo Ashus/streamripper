@@ -25,6 +25,7 @@ SET (STREAMRIPPER_LIB_SRC
 	parse.c parse.h
 	prefs.c prefs.h
 	relaylib.c relaylib.h
+	recording_lock.c recording_lock.h
 	ripaac.c
 	ripogg.c ripogg.h
 	ripstream.c ripstream.h

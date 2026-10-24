@@ -21,7 +21,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header(key, value)
         self.end_headers()
         try:
-            for i in range(1000):
+            # End after all three completed titles and enough of the final title.
+            for i in range(4 * 48 + 24):
                 title = 'Band - Song ' + str(min(i // 48, 3))
                 meta = ("StreamTitle='" + title + "';").encode()
                 meta += bytes(-len(meta) % 16)
@@ -44,7 +45,7 @@ try:
             for run in range(2):
                 result = subprocess.run([
                     str(repo / 'dist' / 'streamripper.exe'),
-                    f'http://localhost:{server.server_port}/stream', '-c', '-l', '3',
+                    f'http://localhost:{server.server_port}/stream', '-c', '-l', '10',
                     '-k', '0', '-s', '-D', pattern, '--xs-none',
                 ], capture_output=True, timeout=15)
                 assert result.returncode == 0, result.stdout + result.stderr

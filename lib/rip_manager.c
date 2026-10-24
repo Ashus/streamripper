@@ -44,6 +44,7 @@
 
 #include "errors.h"
 #include "filelib.h"
+#include "recording_lock.h"
 #include "socklib.h"
 #include "mchar.h"
 #include "findsep.h"
@@ -202,6 +203,7 @@ rip_manager_stop (RIP_MANAGER_INFO *rmi)
     debug_printf ("Destroying subsystems...\n");
     destroy_subsystems (rmi);
     debug_printf ("Destroying m_started_sem\n");
+    recording_locks_release(&rmi->recording_locks);
     threadlib_destroy_sem(&rmi->started_sem);
     parser_free(rmi);
     debug_printf ("Done with rip_manager_stop\n");
@@ -306,6 +308,11 @@ ripthread (void *thread_arg)
 		ret = start_ripping (rmi);
 		if (ret == SR_SUCCESS)
 		    break;
+                if (ret == SR_ERROR_OUTPUT_DIRECTORY_LOCKED) {
+                    callback_post_error(rmi, ret);
+                    rmi->started = 0;
+                    break;
+                }
 		Sleep(1000);
 	    }
 	    if (!rmi->started) {

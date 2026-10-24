@@ -122,6 +122,7 @@ errors_init (void)
     SET_ERR_STR("SR_ERROR_CANT_PARSE_M3U",                      0x41);
     SET_ERR_STR("SR_ERROR_CANT_CREATE_SOCKET",                  0x42);
     SET_ERR_STR("SR_ERROR_CREATE_PIPE_FAILED",                  0x43);
+    SET_ERR_STR("Unable to acquire the recording directory lock", 0x45);
 }
 
 char*

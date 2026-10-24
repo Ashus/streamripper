@@ -31,6 +31,7 @@
 #include "glib.h"
 #include "glib/gstdio.h"
 #include "rip_manager.h"
+#include "recording_lock.h"
 #include "uce_dirent.h"
 
 #ifdef SR_MODERN_WINDOWS
@@ -238,6 +239,10 @@ filelib_init (RIP_MANAGER_INFO* rmi,
     msnprintf (fli->m_incomplete_directory, SR_MAX_PATH, m_S m_S m_C, 
 	       fli->m_output_directory, m_("incomplete"), PATH_SLASH);
 
+    if ((do_individual_tracks || do_show_file || rmi->prefs->metadata_log) &&
+        !recording_lock_acquire(&rmi->recording_locks, fli->m_incomplete_directory))
+        return SR_ERROR_OUTPUT_DIRECTORY_LOCKED;
+
     /* Recursively make the output directory & incomplete directory */
     if (fli->m_do_individual_tracks) {
 	debug_mprintf (m_("Trying to make output_directory: ") m_S m_("\n"), 
@@ -275,7 +280,12 @@ filelib_init (RIP_MANAGER_INFO* rmi,
 			      get_date_stamp,
 			      1);
 	mkdir_recursive (rmi, fli->m_showfile_directory, 1);
-	filelib_open_showfiles (rmi);
+        gchar *incomplete = g_build_filename(fli->m_showfile_directory, "incomplete", NULL);
+        gboolean locked = recording_lock_acquire(&rmi->recording_locks, incomplete);
+        g_free(incomplete);
+        if (!locked) return SR_ERROR_OUTPUT_DIRECTORY_LOCKED;
+        error_code rc = filelib_open_showfiles(rmi);
+        if (rc != SR_SUCCESS) return rc;
     }
 
     return SR_SUCCESS;

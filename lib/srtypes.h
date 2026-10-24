@@ -650,6 +650,7 @@ struct RIP_MANAGER_INFOst
 
     /* Private data used by filelib.c */
     FILELIB_INFO filelib_info;
+    GList *recording_locks;          /* Held across reconnects until final shutdown */
 
     /* Private data used by relaylib.c */
     RELAYLIB_INFO relaylib_info;
