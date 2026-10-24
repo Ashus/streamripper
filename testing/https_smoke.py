@@ -25,10 +25,14 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
 
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
+        reconnect_requests = 0
         def log_message(self, *args):
             pass
 
         def do_GET(self):
+            if self.path == '/reconnect':
+                Handler.reconnect_requests += 1
+                self.close_connection = True
             if self.path.startswith('/http10'):
                 assert self.request_version == 'HTTP/1.0', self.request_version
             if self.path.startswith('/redirect'):
@@ -61,6 +65,8 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
             offset = 0
             try:
                 for index in range(1000):
+                    if self.path == '/reconnect' and index == 96:
+                        return
                     if index == 64:
                         title = "StreamTitle='Druhá kapela - Další píseň';".encode('utf-8')
                         title += bytes(-len(title) % 16)
@@ -172,7 +178,20 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
                 process.communicate()
         print('OK: relay-metadata-and-shutdown', flush=True)
 
+    def reconnect_test():
+        env = dict(os.environ, SSL_CERT_FILE=str(cert))
+        result = subprocess.run([str(exe), f'https://localhost:{tls.server_port}/reconnect',
+                    '-l', '5', '-s', '-A', '-a', 'show', '-d', str(root / 'reconnect'),
+                    '--tls-info'], capture_output=True, timeout=15, env=env)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert Handler.reconnect_requests >= 2, Handler.reconnect_requests
+        assert result.stdout.count(b'TLS: ') == 1, result.stdout
+        print('OK: TLS info printed once across reconnects', flush=True)
+
     try:
+        reconnect_test()
+        if '--reconnect-only' in sys.argv[4:]:
+            sys.exit(0)
         record('https', f'https://localhost:{tls.server_port}/stream?x=1:2&y=@')
         record('redirect', f'https://localhost:{tls.server_port}/redirect')
         record('http', f'http://localhost:{plain.server_port}/stream')

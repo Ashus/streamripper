@@ -236,6 +236,8 @@ typedef struct HSOCKETst
 #ifdef HAVE_OPENSSL
         void *tls;
         void *proxy_tls;             /* Outer TLS retained beneath a CONNECT tunnel */
+        BOOL tls_info_printed;
+        BOOL proxy_tls_info_printed;
 #endif
 } HSOCKET;
 

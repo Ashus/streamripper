@@ -392,7 +392,8 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     }
     if ((!transport && !SSL_set_fd(ssl, (int)socket_handle->s)) || SSL_connect(ssl) != 1) goto failed;
     debug_printf("TLS connected: %s, %s\n", SSL_get_version(ssl), SSL_get_cipher(ssl));
-    if (prefs->tls_info) {
+    BOOL *info_printed = proxy ? &socket_handle->proxy_tls_info_printed : &socket_handle->tls_info_printed;
+    if (prefs->tls_info && !*info_printed) {
         const char *signature = "unknown";
         const char *group = SSL_group_to_name(ssl, SSL_get_negotiated_group(ssl));
 #if OPENSSL_VERSION_NUMBER >= 0x30500000L
@@ -405,6 +406,7 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
                 proxy ? " proxy" : "", SSL_get_version(ssl), SSL_get_cipher(ssl), group ? group : "unknown",
                 signature ? signature : "unknown", prefs->tls_insecure ? "disabled" : "enabled");
         fflush(stdout);
+        *info_printed = TRUE;
     }
     return SR_SUCCESS;
 failed:
