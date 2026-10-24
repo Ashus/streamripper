@@ -33,6 +33,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
 #endif
 
 #if __UNIX__
@@ -112,96 +113,202 @@ read_interface (char *if_name, uint32_t *addr)
  * open's a tcp connection to host at port, host can be a dns name or IP,
  * socket_handle gets assigned to the handle for the connection
  */
-error_code 
-socklib_open (HSOCKET *socket_handle, char *host, int port, 
-	      char *if_name, int timeout)
+error_code
+socklib_bind_interface(SOCKET sock, int family, const char *if_name)
 {
-    int rc;
-    struct sockaddr_in address, local;
-    struct hostent *hp;
-    int len;
+#ifndef WIN32
+    struct ifaddrs *interfaces, *entry;
+    error_code result = SR_ERROR_CANT_BIND_ON_INTERFACE;
+    if (!if_name || !*if_name) return SR_SUCCESS;
+    if (getifaddrs(&interfaces) != 0) return result;
+    for (entry = interfaces; entry; entry = entry->ifa_next) {
+        if (entry->ifa_addr && entry->ifa_addr->sa_family == family &&
+            !strcmp(entry->ifa_name, if_name)) {
+            socklen_t length = family == AF_INET6 ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
+            if (bind(sock, entry->ifa_addr, length) == 0) {
+                result = SR_SUCCESS;
+                break;
+            }
+        }
+    }
+    freeifaddrs(interfaces);
+    return result;
+#else
+    /* The inherited -I setting is Unix-only. */
+    return SR_SUCCESS;
+#endif
+}
 
-    if (!socket_handle || !host)
-	return SR_ERROR_INVALID_PARAM;
+static int
+set_socket_blocking(SOCKET sock, int blocking)
+{
+#ifdef WIN32
+    u_long mode = blocking ? 0 : 1;
+    return ioctlsocket(sock, FIONBIO, &mode);
+#else
+    int flags = fcntl(sock, F_GETFL, 0);
+    return flags < 0 ? -1 : fcntl(sock, F_SETFL, blocking ? flags & ~O_NONBLOCK : flags | O_NONBLOCK);
+#endif
+}
 
+error_code
+socklib_open (HSOCKET *socket_handle, char *host, int port,
+              char *if_name, int timeout)
+{
+    struct addrinfo hints = {0}, *addresses = NULL, *address;
+    char service[6];
+    GArray *pending;
+    SOCKET connected = (SOCKET)SOCKET_ERROR;
+    gint64 deadline, next_attempt = 0;
+    error_code result = SR_ERROR_CONNECT_FAILED;
+
+    if (!socket_handle || !host || port < 1 || port > 65535)
+        return SR_ERROR_INVALID_PARAM;
     socket_handle->closed = TRUE;
+    socket_handle->s = SOCKET_ERROR;
     socket_handle->chunked = FALSE;
     socket_handle->chunk_done = FALSE;
     socket_handle->chunk_crlf = FALSE;
     socket_handle->chunk_remaining = 0;
-
-    /* On error:
-       Unix returns -1 and sets errno.
-       Windows??? */
 #ifdef HAVE_OPENSSL
     socket_handle->tls = NULL;
 #endif
-    socket_handle->s = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_handle->s == SOCKET_ERROR) {
-	debug_printf ("socket() failed\n");
-	return SR_ERROR_CANT_CREATE_SOCKET;
-    }
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    snprintf(service, sizeof(service), "%d", port);
+    /* Do not use AI_ADDRCONFIG: loopback needs no globally configured address. */
+    if (getaddrinfo(host, service, &hints, &addresses) != 0)
+        return SR_ERROR_CANT_RESOLVE_HOSTNAME;
+    pending = g_array_new(FALSE, FALSE, sizeof(SOCKET));
+    address = addresses;
+    deadline = g_get_monotonic_time() + (gint64)(timeout > 0 ? timeout : 15) * G_USEC_PER_SEC;
 
-    if (if_name) {
-	if (read_interface (if_name, (uint32_t *)&local.sin_addr.s_addr) != 0)
-	    local.sin_addr.s_addr = htonl(INADDR_ANY);
-	local.sin_family = AF_INET;
-	local.sin_port = htons(0);
-	/* On error:
-	   Unix returns -1 and sets errno.
-	   Windows??? */
-	debug_printf ("Calling bind\n");
-	if (bind(socket_handle->s, (struct sockaddr *)&local, 
-		 sizeof(local)) == SOCKET_ERROR) {
-	    debug_printf ("Bind failed\n");
-	    closesocket (socket_handle->s);
-	    return SR_ERROR_CANT_BIND_ON_INTERFACE;
-	}
-    }
-
-    if ((address.sin_addr.s_addr = inet_addr(host)) == INADDR_NONE) {
-	debug_printf ("Calling gethostbyname\n");
-	hp = gethostbyname (host);
-	if (hp) {
-	    memcpy (&address.sin_addr, hp->h_addr_list[0], hp->h_length);
-	} else {
-	    debug_printf ("resolving hostname: %s failed\n", host);
-	    /* GCS Added... */
-	    closesocket (socket_handle->s);
-	    return SR_ERROR_CANT_RESOLVE_HOSTNAME;
-	}
-    }
-    address.sin_family = AF_INET;
-    address.sin_port = htons((unsigned short)port);
-    len = sizeof(address);
-
-    debug_printf ("Calling connect\n");
-    rc = connect (socket_handle->s, (struct sockaddr *)&address, len);
-    debug_printf ("Connect complete\n");
-    if (rc == SOCKET_ERROR) {
-	debug_printf ("connect failed\n");
-	/* GCS Added... */
-	closesocket (socket_handle->s);
-	return SR_ERROR_CONNECT_FAILED;
-    }
-
-#ifdef WIN32
-    {
-	DWORD tv = (timeout > 0 ? timeout : 15) * 1000;
-        setsockopt(socket_handle->s, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv, sizeof(tv));
-	rc = setsockopt (socket_handle->s, SOL_SOCKET,  SO_RCVTIMEO, 
-			 (char *)&tv, sizeof(tv));
-	if (rc == SOCKET_ERROR) {
-	    debug_printf ("setsockopt failed\n");
-	    /* GCS Added... */
-	    closesocket (socket_handle->s);
-	    return SR_ERROR_CANT_SET_SOCKET_OPTIONS;
-	}
-    }
+    /* Stagger address attempts by 250 ms; a slow IPv6 route must not block IPv4.
+       All attempts share one timeout, and every losing socket is closed. */
+    while (address || pending->len) {
+        fd_set writable, failed;
+        struct timeval wait;
+        gint64 now = g_get_monotonic_time(), until;
+        SOCKET highest = 0;
+        int selected;
+        guint i;
+        if (now >= deadline) break;
+        if (address && now >= next_attempt && pending->len < FD_SETSIZE) {
+            struct addrinfo *candidate = address;
+            SOCKET sock;
+            int rc, in_progress;
+            address = address->ai_next;
+            sock = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
+            if (sock == (SOCKET)SOCKET_ERROR) {
+                result = SR_ERROR_CANT_CREATE_SOCKET;
+                continue;
+            }
+#ifndef WIN32
+            if (sock >= FD_SETSIZE) {
+                closesocket(sock);
+                continue;
+            }
 #endif
-
-    socket_handle->closed = FALSE;
-    return SR_SUCCESS;
+            result = socklib_bind_interface(sock, candidate->ai_family, if_name);
+            if (result == SR_SUCCESS) {
+#ifdef WIN32
+                DWORD interval = (DWORD)(timeout > 0 ? timeout : 15) * 1000;
+#else
+                struct timeval interval = {timeout > 0 ? timeout : 15, 0};
+#endif
+                if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char *)&interval, sizeof(interval)) != 0 ||
+                    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&interval, sizeof(interval)) != 0)
+                    result = SR_ERROR_CANT_SET_SOCKET_OPTIONS;
+                else if (set_socket_blocking(sock, FALSE) != 0)
+                    result = SR_ERROR_CONNECT_FAILED;
+            }
+            if (result != SR_SUCCESS) {
+                closesocket(sock);
+                continue;
+            }
+            rc = connect(sock, candidate->ai_addr, (socklen_t)candidate->ai_addrlen);
+            if (rc == 0) {
+                connected = sock;
+                break;
+            }
+#ifdef WIN32
+            rc = WSAGetLastError();
+            in_progress = rc == WSAEWOULDBLOCK || rc == WSAEINPROGRESS;
+#else
+            in_progress = errno == EINPROGRESS;
+#endif
+            result = SR_ERROR_CONNECT_FAILED;
+            if (!in_progress) {
+                closesocket(sock);
+                continue;
+            }
+            g_array_append_val(pending, sock);
+            next_attempt = now + 250000;
+        }
+        if (!pending->len) {
+            next_attempt = 0;
+            continue;
+        }
+        FD_ZERO(&writable);
+        FD_ZERO(&failed);
+        for (i = 0; i < pending->len; i++) {
+            SOCKET sock = g_array_index(pending, SOCKET, i);
+            FD_SET(sock, &writable);
+            FD_SET(sock, &failed);
+            if (sock > highest) highest = sock;
+        }
+        until = deadline;
+        if (address && pending->len < FD_SETSIZE && next_attempt < until) until = next_attempt;
+        until = MAX((gint64)0, until - g_get_monotonic_time());
+        wait.tv_sec = (long)(until / G_USEC_PER_SEC);
+        wait.tv_usec = (long)(until % G_USEC_PER_SEC);
+#ifdef WIN32
+        selected = select(0, NULL, &writable, &failed, &wait);
+#else
+        selected = select(highest + 1, NULL, &writable, &failed, &wait);
+#endif
+        if (selected < 0) {
+#ifdef WIN32
+            if (WSAGetLastError() == WSAEINTR) continue;
+#else
+            if (errno == EINTR) continue;
+#endif
+            result = SR_ERROR_CONNECT_FAILED;
+            break;
+        }
+        for (i = pending->len; i > 0; i--) {
+            SOCKET sock = g_array_index(pending, SOCKET, i - 1);
+            if (FD_ISSET(sock, &writable) || FD_ISSET(sock, &failed)) {
+                int error = 0;
+                socklen_t length = sizeof(error);
+                if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char *)&error, &length) == 0 && !error) {
+                    connected = sock;
+                    break;
+                }
+                closesocket(sock);
+                g_array_remove_index_fast(pending, i - 1);
+            }
+        }
+        if (connected != (SOCKET)SOCKET_ERROR) break;
+        if (!pending->len) next_attempt = 0;
+    }
+    for (guint i = 0; i < pending->len; i++) {
+        SOCKET sock = g_array_index(pending, SOCKET, i);
+        if (sock != connected) closesocket(sock);
+    }
+    g_array_free(pending, TRUE);
+    freeaddrinfo(addresses);
+    if (connected != (SOCKET)SOCKET_ERROR) {
+        if (set_socket_blocking(connected, TRUE) != 0) {
+            closesocket(connected);
+            return SR_ERROR_CONNECT_FAILED;
+        }
+        socket_handle->s = connected;
+        socket_handle->closed = FALSE;
+        return SR_SUCCESS;
+    }
+    return result;
 }
 
 #ifdef HAVE_OPENSSL
@@ -222,6 +329,8 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     SSL *ssl;
     unsigned char ip[16];
+    char verification_host[MAX_HOST_LEN];
+    char *zone;
     if (!ctx) return SR_ERROR_CONNECT_FAILED;
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     SSL_CTX_set_verify(ctx, prefs->tls_insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
@@ -254,8 +363,11 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     if (!ssl) return SR_ERROR_CONNECT_FAILED;
     socket_handle->tls = ssl;
     ERR_clear_error();
-    if (inet_pton(AF_INET, host, ip) == 1 || inet_pton(AF_INET6, host, ip) == 1) {
-        if (!X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host)) goto failed;
+    /* Scope IDs route locally; certificate IP identities never include them. */
+    g_strlcpy(verification_host, host, sizeof(verification_host));
+    if (strchr(verification_host, ':') && (zone = strchr(verification_host, '%')) != NULL) *zone = 0;
+    if (inet_pton(AF_INET, verification_host, ip) == 1 || inet_pton(AF_INET6, verification_host, ip) == 1) {
+        if (!X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), verification_host)) goto failed;
     } else {
         if (!SSL_set_tlsext_host_name(ssl, host) || !SSL_set1_host(ssl, host)) goto failed;
     }

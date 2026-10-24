@@ -6,6 +6,7 @@
 #include "rip_manager.h"
 #include "ripstream_wav.h"
 #include "http.h"
+#include "socklib.h"
 #include "findsep.h"
 #include "track_info.h"
 #include "framed_audio.h"
@@ -68,6 +69,41 @@ static void parser_cycle(RIP_MANAGER_INFO *rmi)
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && !strcmp(argv[1], "--ipv6-requests")) {
+        char request[MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH];
+        CHECK(http_construct_sc_request("http://[::1]:8080/radio?q=a%26b", NULL, request, "test") == SR_SUCCESS);
+        CHECK(strstr(request, "GET /radio?q=a%26b HTTP/1.1\r\n"));
+        CHECK(strstr(request, "\r\nHost: [::1]:8080\r\n"));
+        CHECK(http_construct_sc_request("http://[2001:db8::1]/radio", "http://[::1]:9000", request, "test") == SR_SUCCESS);
+        CHECK(strstr(request, "GET http://[2001:db8::1]:80/radio HTTP/1.1\r\n"));
+        CHECK(strstr(request, "\r\nHost: [2001:db8::1]:80\r\n"));
+        CHECK(http_construct_sc_request("https://[::1]/", NULL, request, "test") == SR_SUCCESS);
+        CHECK(strstr(request, "\r\nHost: [::1]:443\r\n"));
+        CHECK(http_construct_sc_request("http://[fe80::1%2512]:8080/", NULL, request, "test") == SR_SUCCESS);
+        CHECK(strstr(request, "\r\nHost: [fe80::1]:8080\r\n"));
+        CHECK(http_construct_page_request("http://[::1]:8080/page", TRUE, request) == SR_SUCCESS);
+        CHECK(strstr(request, "GET http://[::1]:8080/page HTTP/1.0\r\n"));
+        CHECK(strstr(request, "\r\nHost: [::1]:8080\r\n"));
+        puts("PASS: IPv6 request authorities, proxy forms, default ports and scope removal");
+        return 0;
+    }
+    if (argc == 4 && !strcmp(argv[1], "--ipv6-connect-cycles")) {
+        RIP_MANAGER_INFO rmi = {0};
+        DWORD before, after;
+        CHECK(socklib_init() == SR_SUCCESS);
+        for (int iteration = 0; iteration < 21; iteration++) {
+            for (int port = 2; port <= 3; port++) {
+                CHECK(socklib_open(&rmi.stream_sock, "localhost", atoi(argv[port]), NULL, 2) == SR_SUCCESS);
+                socklib_close(&rmi.stream_sock);
+            }
+            if (!iteration) CHECK(GetProcessHandleCount(GetCurrentProcess(), &before));
+        }
+        CHECK(GetProcessHandleCount(GetCurrentProcess(), &after));
+        CHECK(after <= before + 2);
+        socklib_cleanup();
+        puts("PASS: repeated IPv4/IPv6 connections release racing socket handles");
+        return 0;
+    }
 #if OGG_VORBIS_FOUND
     /* Granule timing is independent of byte count and chained sample rates. */
     {

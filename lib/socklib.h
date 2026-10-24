@@ -24,5 +24,6 @@ socklib_recvall (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 		 char* buffer, int size, int timeout);
 int socklib_sendall (HSOCKET *socket_handle, char* buffer, int size);
 error_code read_interface (char *if_name, uint32_t *addr);
+error_code socklib_bind_interface(SOCKET sock, int family, const char *if_name);
 
 #endif	//__socklib_h__

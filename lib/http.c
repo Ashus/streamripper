@@ -283,6 +283,18 @@ http_parse_url(const char *url, URLINFO *urlinfo)
 #endif
 }
 
+/* A zone identifies a local interface, not the remote HTTP authority. */
+static int
+format_authority(char *authority, size_t size, const URLINFO *ui)
+{
+    char host[MAX_HOST_LEN];
+    char *zone;
+    int ipv6 = strchr(ui->host, ':') != NULL;
+    g_strlcpy(host, ui->host, sizeof(host));
+    if (ipv6 && (zone = strchr(host, '%')) != NULL) *zone = 0;
+    return g_snprintf(authority, size, ipv6 ? "[%s]:%d" : "%s:%d", host, ui->port);
+}
+
 error_code
 http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, char *useragent)
 {
@@ -290,11 +302,15 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
     URLINFO ui;
     URLINFO proxyui;
     char myurl[MAX_URL_LEN];
+    char authority[MAX_HOST_LEN + 10];
     if ((ret = http_parse_url(url, &ui)) != SR_SUCCESS)
 	return ret;
 
+    ret = format_authority(authority, sizeof(authority), &ui);
+    if (ret < 0 || ret >= sizeof(authority)) return SR_ERROR_INVALID_URL;
+
     if (proxyurl) {
-	if (g_snprintf(myurl, sizeof(myurl), "http://%s:%d%s", ui.host, ui.port, ui.path) >= sizeof(myurl))
+	if (g_snprintf(myurl, sizeof(myurl), "http://%s%s", authority, ui.path) >= sizeof(myurl))
             return SR_ERROR_INVALID_URL;
 	if ((ret = http_parse_url(proxyurl, &proxyui)) != SR_SUCCESS)
 	    return ret;
@@ -323,11 +339,10 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
 	     "User-Agent: %s\r\n"
 	     "Icy-Metadata: 1\r\n"
 	     "Connection: close\r\n"
-	     "Host: %s:%d\r\n",
+	     "Host: %s\r\n",
 	     myurl,
 	     useragent[0] ? useragent: "Streamripper/1.x",
-	     ui.host,
-	     ui.port);
+	     authority);
     if (ret < 0 || ret >= MAX_HEADER_LEN) return SR_ERROR_INVALID_URL;
 
     // http authentication (not proxy, see below for that)
@@ -393,28 +408,25 @@ http_construct_page_request (const char *url, BOOL proxyformat, char *buffer)
     int ret;
     URLINFO ui;
     char myurl[MAX_URL_LEN];
-    if ((ret = http_parse_url(url, &ui)) != SR_SUCCESS)
-	return ret;
+    char authority[MAX_HOST_LEN + 10];
+    if ((ret = http_parse_url(url, &ui)) != SR_SUCCESS) return ret;
+    ret = format_authority(authority, sizeof(authority), &ui);
+    if (ret < 0 || ret >= sizeof(authority)) return SR_ERROR_INVALID_URL;
+    if (g_snprintf(myurl, sizeof(myurl), "%s%s%s", proxyformat ? "http://" : "",
+                   proxyformat ? authority : "", ui.path) >= sizeof(myurl))
+        return SR_ERROR_INVALID_URL;
 
-    if (proxyformat)
-	sprintf(myurl, "http://%s:%d%s", ui.host, ui.port, ui.path);
-    else
-	strcpy(myurl, ui.path);
-
-    snprintf(buffer, MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH,
-		"GET %s HTTP/1.0\r\n"
-		"Host: %s:%d\r\n"
-		"Accept: */*\r\n"
-		"Accept-Language: en-us\r\n"
-		"Accept-Encoding: gzip, deflate\r\n"
-		"User-Agent: Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)\r\n"
-		"Connection: Keep-Alive\r\n\r\n", 
-		myurl, 
-		ui.host, 
-		ui.port);
-
-
-    return SR_SUCCESS;
+    ret = snprintf(buffer, MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH,
+                "GET %s HTTP/1.0\r\n"
+                "Host: %s\r\n"
+                "Accept: */*\r\n"
+                "Accept-Language: en-us\r\n"
+                "Accept-Encoding: gzip, deflate\r\n"
+                "User-Agent: Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)\r\n"
+                "Connection: Keep-Alive\r\n\r\n",
+                myurl, authority);
+    return ret < 0 || ret >= MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH
+        ? SR_ERROR_INVALID_URL : SR_SUCCESS;
 }
 
 /* Return 1 if a match was found, 0 if not found */

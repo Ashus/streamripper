@@ -119,7 +119,7 @@ tag_compare (char *str, char *tag)
 }
 
 static int
-header_receive (int sock, int *icy_metadata)
+header_receive (SOCKET sock, int *icy_metadata)
 {
     fd_set fds;
     struct timeval tv;
@@ -182,7 +182,7 @@ header_receive (int sock, int *icy_metadata)
 // All data is discarded
 // Returns 0 if successful or SOCKET_ERROR if error
 static int
-swallow_receive (int sock)
+swallow_receive (SOCKET sock)
 {
     fd_set fds;
     struct timeval tv;
@@ -220,7 +220,7 @@ swallow_receive (int sock)
 
 // Makes a socket non-blocking
 void
-make_nonblocking (int sock)
+make_nonblocking (SOCKET sock)
 {
 #if defined (WIN32)
     long opt = 1;
@@ -325,58 +325,67 @@ relaylib_start (RIP_MANAGER_INFO* rmi,
 static error_code
 try_port (RELAYLIB_INFO* rli, u_short port, char *if_name, char *relay_ip)
 {
-    struct hostent *he;
-    struct sockaddr_in local;
-
-    rli->m_listensock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (rli->m_listensock == SOCKET_ERROR) {
-	debug_printf ("try_port(%d) failed socket() call\n", port);
-        return SR_ERROR_SOCK_BASE;
-    }
-    make_nonblocking(rli->m_listensock);
-
-    if ('\0' == *relay_ip) {
-        if (read_interface(if_name,(uint32_t *)&local.sin_addr.s_addr) != 0)
-	    local.sin_addr.s_addr = htonl(INADDR_ANY);
-    } else {
-	he = gethostbyname(relay_ip);
-        if (!he) {
-            closesocket(rli->m_listensock);
-            rli->m_listensock = SOCKET_ERROR;
-            return SR_ERROR_CANT_RESOLVE_HOSTNAME;
-        }
-	memcpy(&local.sin_addr, he->h_addr_list[0], he->h_length);
-    }
-
-    local.sin_family = AF_INET;
-    local.sin_port = htons(port);
-
+    struct addrinfo hints = {0}, *addresses = NULL, *address;
+    char service[6], interface_ip[INET_ADDRSTRLEN];
+    const char *host = relay_ip && *relay_ip ? relay_ip : NULL;
+    error_code result = SR_ERROR_CANT_BIND_ON_PORT;
+    int pass;
 #ifndef WIN32
-    {
-        // Prevent port error when restarting quickly after a previous exit
-        int opt = 1;
-        setsockopt(rli->m_listensock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    /* Preserve the inherited interface-selected IPv4 relay binding. */
+    if (!host && if_name && *if_name) {
+        struct in_addr local;
+        if (read_interface(if_name, (uint32_t *)&local.s_addr) != 0 ||
+            !inet_ntop(AF_INET, &local, interface_ip, sizeof(interface_ip)))
+            return SR_ERROR_CANT_BIND_ON_INTERFACE;
+        host = interface_ip;
     }
 #endif
-                        
-    if (bind(rli->m_listensock, (struct sockaddr *)&local, sizeof(local)) == SOCKET_ERROR)
-    {
-	debug_printf ("try_port(%d) failed bind() call\n", port);
-        closesocket(rli->m_listensock);
-        rli->m_listensock = SOCKET_ERROR;
-        return SR_ERROR_CANT_BIND_ON_PORT;
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_PASSIVE;
+    snprintf(service, sizeof(service), "%u", port);
+    if (getaddrinfo(host, service, &hints, &addresses) != 0)
+        return SR_ERROR_CANT_RESOLVE_HOSTNAME;
+    /* A wildcard relay prefers one dual-stack socket, with IPv4 fallback.
+       An explicit IPv6 bind is IPv6-only; an explicit IPv4 bind stays IPv4. */
+    for (pass = 0; pass < (host ? 1 : 2); pass++) {
+        for (address = addresses; address; address = address->ai_next) {
+            SOCKET sock;
+            if (!host && address->ai_family != (pass == 0 ? AF_INET6 : AF_INET)) continue;
+            sock = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
+            if (sock == (SOCKET)SOCKET_ERROR) continue;
+            if (address->ai_family == AF_INET6) {
+                int only = host ? 1 : 0;
+                if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&only, sizeof(only)) != 0) {
+                    closesocket(sock);
+                    continue;
+                }
+            }
+#ifndef WIN32
+            {
+                int reuse = 1;
+                setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse));
+            }
+#endif
+            if (bind(sock, address->ai_addr, (socklen_t)address->ai_addrlen) != 0) {
+                closesocket(sock);
+                continue;
+            }
+            if (listen(sock, SOMAXCONN) != 0) {
+                closesocket(sock);
+                result = SR_ERROR_SOCK_BASE;
+                continue;
+            }
+            make_nonblocking(sock);
+            rli->m_listensock = sock;
+            freeaddrinfo(addresses);
+            return SR_SUCCESS;
+        }
     }
-        
-    if (listen(rli->m_listensock, 1) == SOCKET_ERROR)
-    {
-	debug_printf ("try_port(%d) failed listen() call\n", port);
-        closesocket(rli->m_listensock);
-        rli->m_listensock = SOCKET_ERROR;
-        return SR_ERROR_SOCK_BASE;
-    }
-
-    debug_printf ("try_port(%d) succeeded\n", port);
-    return SR_SUCCESS;
+    freeaddrinfo(addresses);
+    rli->m_listensock = SOCKET_ERROR;
+    return result;
 }
 
 void
@@ -474,7 +483,7 @@ client_relay_header_release (char *ch)
 }
 
 static Relay_client*
-relay_client_add (RIP_MANAGER_INFO *rmi, int newsock, int client_wants_metadata)
+relay_client_add (RIP_MANAGER_INFO *rmi, SOCKET newsock, int client_wants_metadata)
 {
     Relay_client *new_client;
     Cbuf3 *cbuf3 = &rmi->cbuf3;
@@ -528,9 +537,9 @@ static void
 relaylib_accept_thread_main (void *arg)
 {
     int ret;
-    int newsock;
+    SOCKET newsock;
     BOOL good;
-    struct sockaddr_in client;
+    struct sockaddr_storage client;
     socklen_t iAddrSize = sizeof(client);
     //RELAY_LIST* newhostsock;
     Relay_client *new_client;
@@ -585,12 +594,17 @@ relaylib_accept_thread_main (void *arg)
                 }
                 /* Check for connections */
 		debug_printf ("Calling accept()\n");
+                iAddrSize = sizeof(client);
                 newsock = accept (rli->m_listensock, (struct sockaddr *)&client, &iAddrSize);
                 if (newsock != SOCKET_ERROR) {
                     // Got successful accept
 
-                    debug_printf ("Relay: Client %d new from %s:%hu\n", newsock,
-                                  inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+                    {
+                        char host[NI_MAXHOST], service[NI_MAXSERV];
+                        if (getnameinfo((struct sockaddr *)&client, iAddrSize, host, sizeof(host),
+                                        service, sizeof(service), NI_NUMERICHOST | NI_NUMERICSERV) == 0)
+                            debug_printf("Relay: Client new from [%s]:%s\n", host, service);
+                    }
 
                     // Socket is new and its buffer had better have 
 		    // room to hold the entire HTTP header!
@@ -833,7 +847,7 @@ relaylib_send_thread_main (void* arg)
 	while (node) {
 	    GList *current = node;
 	    Relay_client *relay_client = (Relay_client*) node->data;
-	    int sock = relay_client->m_sock;
+	    SOCKET sock = relay_client->m_sock;
 	    node = node->next;
 	    
 	    if (swallow_receive (sock) != 0) {

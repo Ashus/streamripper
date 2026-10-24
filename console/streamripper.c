@@ -345,6 +345,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "--xs-silence-length=MSEC", "Set the expected silence length");
     fputs("\nRelay:\n", stream);
     print_usage_option(stream, "-r, --relay [[IP:]PORT]", "Enable the relay (default port: 8000)");
+    print_usage_option(stream, "", "IPv6 bind: [ADDRESS]:PORT");
     print_usage_option(stream, "-R, --max-relay-clients COUNT", "Max relay clients (default: 1; 0=all)");
     print_usage_option(stream, "-L, --relay-playlist FILE", "Write a relay playlist");
     print_usage_option(stream, "-z, --no-port-scan", "Disable scanning for a free relay port");
@@ -419,6 +420,47 @@ normalize_option(char *input, char **argument)
     return input;
 }
 
+static void
+parse_relay_address(STREAM_PREFS *prefs, const char *value)
+{
+    const char *port = value;
+    const char *host = NULL;
+    size_t host_length = 0;
+    char *end;
+    guint64 number;
+    if (*value == '[') {
+        const char *closing = strchr(value + 1, ']');
+        if (!closing || closing == value + 1 || (closing[1] && closing[1] != ':'))
+            goto invalid;
+        host = value + 1;
+        host_length = closing - host;
+        port = closing[1] ? closing + 2 : NULL;
+    } else {
+        const char *colon = strchr(value, ':');
+        if (colon) {
+            if (colon == value || strchr(colon + 1, ':')) goto invalid;
+            host = value;
+            host_length = colon - host;
+            port = colon + 1;
+        }
+    }
+    if (host_length >= sizeof(prefs->relay_ip)) goto invalid;
+    if (port) {
+        errno = 0;
+        number = g_ascii_strtoull(port, &end, 10);
+        if (!g_ascii_isdigit(*port) || *end || errno == ERANGE || number < 1 || number > 65535)
+            goto invalid;
+        prefs->relay_port = (u_short)number;
+    }
+    if (host) {
+        memcpy(prefs->relay_ip, host, host_length);
+        prefs->relay_ip[host_length] = 0;
+    }
+    return;
+invalid:
+    fprintf(stderr, "Invalid relay address; use PORT, HOST:PORT, or [IPv6]:PORT (port 1-65535).\n");
+    exit(EXIT_FAILURE);
+}
 static u_long
 parse_timeout(const char *value)
 {
@@ -554,14 +596,7 @@ g_strlcpy(prefs->proxyurl, argument, MAX_URL_LEN);
 	case 'r':
 	    OPT_FLAG_SET(prefs->flags, OPT_MAKE_RELAY, 1);
 	    if (!argument) break;
-	    c = strchr(argument, ':');
-	    if (NULL == c) {
-                prefs->relay_port = atoi(argument);
-	    } else {
-	    	*c = '\0';
-g_strlcpy(prefs->relay_ip, argument, SR_MAX_PATH);
-		prefs->relay_port = atoi(++c);
- 	    }
+            parse_relay_address(prefs, argument);
 	    break;
 	case 'R':
 	    prefs->max_connections = atoi(argument);
