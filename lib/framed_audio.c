@@ -23,6 +23,7 @@ struct framed_audio {
     int type;
     GByteArray *pending;
     gboolean synced, variable;
+    gboolean counter_only;
     unsigned int rate, channels, bitrate, index_size, index_offset;
     unsigned char index[576];
     guint64 frames, bytes, duration_ticks, input_bytes;
@@ -178,18 +179,18 @@ static error_code drain(FramedAudio *out, gboolean final)
                 (h.size >= 40 && !memcmp(p + 36, "VBRI", 4))) {
                 pos += h.size; continue;
             }
-            if (!out->index_size) {
+            if (!out->counter_only && !out->index_size) {
                 error_code rc = begin_mp3(out, p, &h);
                 if (rc != SR_SUCCESS) return rc;
             }
-            if (h.rate != out->rate || h.channels != out->channels)
+            if (!out->counter_only && (h.rate != out->rate || h.channels != out->channels))
                 return SR_ERROR_DECODE_FAILURE;
             if (h.bitrate != out->bitrate) out->variable = TRUE;
-            if (out->frames >= UINT32_MAX || out->bytes > UINT32_MAX - h.size)
+            if (!out->counter_only && (out->frames >= UINT32_MAX || out->bytes > UINT32_MAX - h.size))
                 return SR_ERROR_CANT_WRITE_TO_FILE;
         }
         {
-            error_code rc = write_all(out, p, h.size);
+            error_code rc = out->counter_only ? SR_SUCCESS : write_all(out, p, h.size);
             if (rc != SR_SUCCESS) return rc;
         }
         out->frames++; out->bytes += h.size;
@@ -198,6 +199,31 @@ static error_code drain(FramedAudio *out, gboolean final)
     }
     if (pos) g_byte_array_remove_range(out->pending, 0, (guint)pos);
     return SR_SUCCESS;
+}
+
+void framed_audio_counter_free(FramedAudio **counter)
+{
+    if (!*counter) return;
+    g_byte_array_unref((*counter)->pending);
+    g_free(*counter);
+    *counter = NULL;
+}
+
+void framed_audio_counter_init(FramedAudio **counter, int type)
+{
+    framed_audio_counter_free(counter);
+    if (type != CONTENT_TYPE_MP3 && type != CONTENT_TYPE_AAC) return;
+    *counter = g_new0(FramedAudio, 1);
+    (*counter)->type = type;
+    (*counter)->counter_only = TRUE;
+    (*counter)->pending = g_byte_array_new();
+}
+
+gboolean framed_audio_duration(const FramedAudio *counter, guint64 *duration_ms)
+{
+    if (!counter || !counter->frames || counter->error != SR_SUCCESS) return FALSE;
+    *duration_ms = counter->duration_ticks / (AUDIO_CLOCK / 1000);
+    return TRUE;
 }
 
 error_code framed_audio_init(FramedAudio **output, FHANDLE file, int type, gint64 tlen_offset)

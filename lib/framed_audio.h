@@ -5,6 +5,9 @@
 #include "errors.h"
 
 typedef struct framed_audio FramedAudio;
+void framed_audio_counter_init(FramedAudio **counter, int type);
+void framed_audio_counter_free(FramedAudio **counter);
+gboolean framed_audio_duration(const FramedAudio *counter, guint64 *duration_ms);
 error_code framed_audio_init(FramedAudio **output, FHANDLE file, int type,
                              gint64 tlen_offset);
 error_code framed_audio_write(FramedAudio *output, const char *data, size_t size);

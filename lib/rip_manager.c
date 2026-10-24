@@ -45,6 +45,7 @@
 #include "errors.h"
 #include "filelib.h"
 #include "recording_lock.h"
+#include "framed_audio.h"
 #include "socklib.h"
 #include "mchar.h"
 #include "findsep.h"
@@ -359,6 +360,7 @@ destroy_subsystems (RIP_MANAGER_INFO* rmi)
        shutdown, not rip_manager shutdown. */
     // socklib_cleanup();
     filelib_shutdown (rmi);
+    framed_audio_counter_free(&rmi->callback_audio_clock);
     ripstream_destroy (rmi);
 }
 

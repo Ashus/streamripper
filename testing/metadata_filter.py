@@ -90,6 +90,7 @@ try:
                 assert not any(state == b'ripping' and b'ADVERT -' in title for state, title in statuses), statuses
                 assert not any(state == b'incomplete' and b'ADVERT -' in title for state, title in statuses), statuses
                 assert any(state == b'ripping' and b'Artist - One' in title for state, title in statuses), statuses
+                assert re.search(rb'Artist - One \[\s*\d{2}:\d{2}\]', result.stdout), result.stdout
             print('PASS:', extension, 'exclusion, Unicode rules path, empty/hyphen titles, consecutive numbering')
         for blocked in (False, True):
             dest = root / ('blocked-log' if blocked else 'show-only')

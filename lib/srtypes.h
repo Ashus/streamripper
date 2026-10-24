@@ -593,6 +593,9 @@ struct RIP_MANAGER_INFOst
 
     /* Callback data */
     u_long callback_filesize;             /* bytes written to current track */
+    struct framed_audio *callback_audio_clock; /* Incoming frame duration, including excluded tracks */
+    guint64 callback_duration_ms;
+    BOOL callback_duration_known;
     BOOL callback_incomplete;            /* Initial-track decision for the displayed title */
     BOOL callback_filtered;              /* Metadata rules exclude the displayed title */
     char callback_filename[SR_MAX_PATH];  /* not the filename, the trackname */

@@ -228,6 +228,11 @@ ripstream_mp3_rip (RIP_MANAGER_INFO* rmi)
     }
 
     /* Give some feedback to the user about how much we ripped so far */
+    if (rmi->callback_audio_clock) {
+        framed_audio_write(rmi->callback_audio_clock, node->data, cbuf3->chunk_size);
+        rmi->callback_duration_known = framed_audio_duration(rmi->callback_audio_clock,
+                                                            &rmi->callback_duration_ms);
+    }
     callback_put_data (rmi, rmi->getbuffer_size);
 
 #if defined (commentout)

@@ -216,7 +216,7 @@ print_status (RIP_MANAGER_INFO *rmi)
 {
     STREAM_PREFS *prefs = rmi->prefs;
     char status_str[128];
-    char filesize_str[64];
+    char duration_str[32];
     int title_bytes = (int)(g_utf8_offset_to_pointer(rmi->callback_filename,
         MIN(g_utf8_strlen(rmi->callback_filename, -1), 50)) - rmi->callback_filename);
     static int buffering_tick = 0;
@@ -251,12 +251,31 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    } else {
 		strcpy(status_str, "ripping...    ");
 	    }
-	    format_byte_size(filesize_str, rmi->callback_filesize);
-	    print_to_console ("[%14s] %.*s [%7s]\r",
+            if (!rmi->callback_duration_known) {
+                guint64 bytes = rmi->callback_filesize;
+                if (bytes < 1000)
+                    g_snprintf(duration_str, sizeof(duration_str), "%" G_GUINT64_FORMAT "B", bytes);
+                else if (bytes < 1000000)
+                    g_snprintf(duration_str, sizeof(duration_str), "%" G_GUINT64_FORMAT "kB", bytes / 1000);
+                else {
+                    guint64 hundredths = (bytes + 5000) / 10000;
+                    g_snprintf(duration_str, sizeof(duration_str), "%" G_GUINT64_FORMAT ",%02uMB",
+                               hundredths / 100, (unsigned)(hundredths % 100));
+                }
+            } else {
+                guint64 seconds = rmi->callback_duration_ms / 1000;
+                if (seconds >= 3600)
+                    g_snprintf(duration_str, sizeof(duration_str), "%" G_GUINT64_FORMAT ":%02u:%02u",
+                               seconds / 3600, (unsigned)((seconds / 60) % 60), (unsigned)(seconds % 60));
+                else
+                    g_snprintf(duration_str, sizeof(duration_str), "%02u:%02u",
+                               (unsigned)(seconds / 60), (unsigned)(seconds % 60));
+            }
+	    print_to_console ("[%14s] %.*s [%8s]\r",
 			      status_str,
 			      title_bytes,
 			      rmi->callback_filename,
-			      filesize_str);
+			      duration_str);
 	    break;
 	case RM_STATUS_RECONNECTING:
 	    strcpy(status_str, "re-connecting..");

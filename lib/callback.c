@@ -54,6 +54,7 @@
 #include "debug.h"
 #include "sr_compat.h"
 #include "callback.h"
+#include "framed_audio.h"
 
 
 /******************************************************************************
@@ -95,6 +96,9 @@ callback_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti)
     rmi->callback_filesize = 0;
     rmi->callback_incomplete = rmi->track_count < rmi->prefs->dropcount;
     rmi->callback_filtered = !ti->save_track;
+    framed_audio_counter_init(&rmi->callback_audio_clock, rmi->http_info.content_type);
+    rmi->callback_duration_known = FALSE;
+    rmi->callback_duration_ms = 0;
     string_from_gstring (rmi, rmi->callback_filename, 
 			 SR_MAX_PATH, console_string, 
 			 CODESET_UTF8);
