@@ -97,35 +97,35 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=release) as temporary:
                     print(f'Error: {exc}', file=sys.stderr)
                     print(f'WinError: {getattr(exc, "winerror", None)}', file=sys.stderr)
                     raise
-        dest.mkdir(parents=True, exist_ok=True)
-        for path in stage.rglob('*'):
-            if path.is_file():
-                target = dest / path.relative_to(stage)
-                target.parent.mkdir(parents=True, exist_ok=True)
+    dest.mkdir(parents=True, exist_ok=True)
+    for path in stage.rglob('*'):
+        if path.is_file():
+            target = dest / path.relative_to(stage)
+            target.parent.mkdir(parents=True, exist_ok=True)
 
-                print(f'[COPY] {path} -> {target}', flush=True)
+            print(f'[COPY] {path} -> {target}', flush=True)
 
-                try:
-                    shutil.copy2(path, target)
-                except OSError as exc:
-                    print('\n' + '=' * 70, file=sys.stderr)
-                    print('[ERROR] Failed to copy file!', file=sys.stderr)
-                    print(f'Source:   {path}', file=sys.stderr)
-                    print(f'Target:   {target}', file=sys.stderr)
-                    print(f'Error:    {exc}', file=sys.stderr)
-                    print(f'WinError: {getattr(exc, "winerror", None)}', file=sys.stderr)
+            try:
+                shutil.copy2(path, target)
+            except OSError as exc:
+                print('\n' + '=' * 70, file=sys.stderr)
+                print('[ERROR] Failed to copy file!', file=sys.stderr)
+                print(f'Source:   {path}', file=sys.stderr)
+                print(f'Target:   {target}', file=sys.stderr)
+                print(f'Error:    {exc}', file=sys.stderr)
+                print(f'WinError: {getattr(exc, "winerror", None)}', file=sys.stderr)
 
-                    if getattr(exc, 'winerror', None) in (32, 33):
-                        print(
-                            '\n[LOCKED] The file is likely open or locked '
-                            'by another process!',
-                            file=sys.stderr
-                        )
-                        print(f'Check source: {path}', file=sys.stderr)
-                        print(f'Check target: {target}', file=sys.stderr)
+                if getattr(exc, 'winerror', None) in (32, 33):
+                    print(
+                        '\n[LOCKED] The file is likely open or locked '
+                        'by another process!',
+                        file=sys.stderr
+                    )
+                    print(f'Check source: {path}', file=sys.stderr)
+                    print(f'Check target: {target}', file=sys.stderr)
 
-                    print('=' * 70, file=sys.stderr)
-                    raise
+                print('=' * 70, file=sys.stderr)
+                raise
     for directory in sorted((path for path in dest.rglob('*') if path.is_dir()), reverse=True):
         try:
             directory.rmdir()

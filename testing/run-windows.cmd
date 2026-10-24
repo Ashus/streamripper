@@ -6,6 +6,8 @@ set "PATH=%SR_TOOLCHAIN%\bin;%PATH%"
 pushd "%~dp0.."
 ctest --test-dir build --output-on-failure
 if errorlevel 1 goto failed
+python testing\package_smoke.py "%SR_TOOLCHAIN%"
+if errorlevel 1 goto failed
 python testing\silence_output.py build\core_regression.exe build\sample-5s.mp3 "%SR_TOOLCHAIN%\bin"
 if errorlevel 1 goto failed
 python testing\https_smoke.py dist\streamripper.exe build\sample-5s.mp3 "%SR_TOOLCHAIN%\bin\openssl.exe"

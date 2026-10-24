@@ -3,3 +3,4 @@
 /build.log
 /gcs.txt
 __pycache__/
+/.idea/
