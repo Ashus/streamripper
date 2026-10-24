@@ -95,19 +95,28 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
 		   RIP_MANAGER_CALLBACK status_callback)
 {
     RIP_MANAGER_INFO* rmi;
-#if __UNIX__
     int rc;
-#endif
 
     if (!prefs || !rmip) {
 	return SR_ERROR_INVALID_PARAM;
     }
 
     rmi = (*rmip) = (RIP_MANAGER_INFO*) malloc (sizeof(RIP_MANAGER_INFO));
+    if (!rmi) return SR_ERROR_CANT_ALLOC_MEMORY;
     memset (rmi, 0, sizeof(RIP_MANAGER_INFO));
+    rmi->stream_sock.closed = TRUE;
+    rmi->filelib_info.m_show_file = INVALID_FHANDLE;
+    rmi->filelib_info.m_cue_file = INVALID_FHANDLE;
     rmi->prefs = prefs;
 
     rmi->started_sem = threadlib_create_sem();
+#ifdef WIN32
+    if (!rmi->started_sem) {
+        free(rmi);
+        *rmip = NULL;
+        return SR_ERROR_CANT_CREATE_EVENT;
+    }
+#endif
 
     register_codesets (rmi, &prefs->cs_opt);
 
@@ -120,6 +129,9 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
 #if __UNIX__
     rc = pipe (rmi->abort_pipe);
     if (rc != 0) {
+        threadlib_destroy_sem(&rmi->started_sem);
+        free(rmi);
+        *rmip = NULL;
 	return SR_ERROR_CREATE_PIPE_FAILED;
     }
 #endif
@@ -137,8 +149,19 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
     /* Start the ripping thread */
     debug_printf ("Pre ripthread: %s\n", rmi->prefs->url);
     rmi->started = 1;
-    return threadlib_beginthread (&rmi->hthread_ripper, 
+    rc = threadlib_beginthread (&rmi->hthread_ripper,
 				  ripthread, (void*) rmi);
+    if (rc != SR_SUCCESS) {
+        parser_free(rmi);
+        threadlib_destroy_sem(&rmi->started_sem);
+#if __UNIX__
+        close(rmi->abort_pipe[0]);
+        close(rmi->abort_pipe[1]);
+#endif
+        free(rmi);
+        *rmip = NULL;
+    }
+    return rc;
 }
 
 /** Abort ripping threads and processes, and free memory.
@@ -149,10 +172,11 @@ void
 rip_manager_stop (RIP_MANAGER_INFO *rmi)
 {
     // Make sure this function isn't getting called twice
-    if (!rmi->started) {
+    if (!rmi || rmi->stopped) {
 	debug_printf ("rip_manager_stop() called while not started\n");
 	return;
     }
+    rmi->stopped = TRUE;
     
     /* Write to pipe so ripping thread will exit select() */
 #if __UNIX__
@@ -169,12 +193,6 @@ rip_manager_stop (RIP_MANAGER_INFO *rmi)
     debug_printf ("Closing stream_sock...\n");
     socklib_close(&rmi->stream_sock);
 
-    // Kill external process
-    if (rmi->ep) {
-	debug_printf ("Close external\n");
-	close_external (&rmi->ep);
-    }
-
     // blocks until everything is ok and closed
     debug_printf ("Waiting for hthread_ripper to close...\n");
     threadlib_waitforclose(&rmi->hthread_ripper);
@@ -185,6 +203,7 @@ rip_manager_stop (RIP_MANAGER_INFO *rmi)
     destroy_subsystems (rmi);
     debug_printf ("Destroying m_started_sem\n");
     threadlib_destroy_sem(&rmi->started_sem);
+    parser_free(rmi);
     debug_printf ("Done with rip_manager_stop\n");
 
     /* Close pipes */
@@ -323,12 +342,17 @@ ripthread (void *thread_arg)
 void
 destroy_subsystems (RIP_MANAGER_INFO* rmi)
 {
-    ripstream_destroy (rmi);
+    socklib_close(&rmi->stream_sock);
+#ifdef HAVE_OPENSSL
+    socklib_free_tls(&rmi->stream_sock);
+#endif
+    if (rmi->ep) close_external(&rmi->ep);
     relaylib_stop (rmi);
     /* GCS Feb 17,2008.  The socklib_cleanup() is done at program 
        shutdown, not rip_manager shutdown. */
     // socklib_cleanup();
     filelib_shutdown (rmi);
+    ripstream_destroy (rmi);
 }
 
 static int
@@ -400,8 +424,8 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     rmi->http_bitrate = rmi->http_info.icy_bitrate;
     rmi->detected_bitrate = -1;
     rmi->bitrate = -1;
-    strcpy (rmi->streamname, rmi->http_info.icy_name);
-    strcpy (rmi->server_name, rmi->http_info.server);
+    g_strlcpy (rmi->streamname, rmi->http_info.icy_name, sizeof(rmi->streamname));
+    g_strlcpy (rmi->server_name, rmi->http_info.server, sizeof(rmi->server_name));
 
     /* Initialize file writing code. */
     ret = filelib_init
@@ -436,7 +460,7 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     }
 
     /* Allocate buffers for ripstream */
-    strcpy(rmi->no_meta_name, rmi->http_info.icy_name);
+    g_strlcpy(rmi->no_meta_name, rmi->http_info.icy_name, sizeof(rmi->no_meta_name));
     rmi->getbuffer = 0;
     ret = ripstream_init(rmi);
     if (ret != SR_SUCCESS) {

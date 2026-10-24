@@ -333,6 +333,13 @@ prefs_get_stream_prefs (STREAM_PREFS* prefs, char* label)
 }
 
 void
+prefs_cleanup (void)
+{
+    if (m_key_file) g_key_file_free(m_key_file);
+    m_key_file = NULL;
+}
+
+void
 prefs_set_stream_prefs (STREAM_PREFS* prefs, char* label)
 {
     if (!label) {
@@ -667,49 +674,48 @@ prefs_set_stream_prefs_keyfile (STREAM_PREFS* prefs, STREAM_PREFS* gp,
 {
     if (!m_key_file) return;
 
-    if (!gp || !strcmp(prefs->url, gp->url)) {
+    if (!gp || strcmp(prefs->url, gp->url)) {
 	prefs_set_string (group, "url", prefs->url);
     }
-    if (!gp || !strcmp(prefs->proxyurl, gp->proxyurl)) {
+    if (!gp || strcmp(prefs->proxyurl, gp->proxyurl)) {
 	prefs_set_string (group, "proxy", prefs->proxyurl);
     }
-    if (!gp || !strcmp(prefs->output_directory, gp->output_directory)) {
+    if (!gp || strcmp(prefs->output_directory, gp->output_directory)) {
 	prefs_set_string (group, "output_dir", prefs->output_directory);
     }
-    if (!gp || !strcmp(prefs->output_pattern, gp->output_pattern)) {
+    if (!gp || strcmp(prefs->output_pattern, gp->output_pattern)) {
 	prefs_set_string (group, "output_pattern", prefs->output_pattern);
     }
-    if (!gp || !strcmp(prefs->showfile_pattern, gp->showfile_pattern)) {
+    if (!gp || strcmp(prefs->showfile_pattern, gp->showfile_pattern)) {
 	prefs_set_string (group, "showfile_pattern", prefs->showfile_pattern);
     }
-    if (!gp || !strcmp(prefs->if_name, gp->if_name)) {
+    if (!gp || strcmp(prefs->if_name, gp->if_name)) {
 	prefs_set_string (group, "if_name", prefs->if_name);
     }
-    if (!gp || !strcmp(prefs->rules_file, gp->rules_file)) {
+    if (!gp || strcmp(prefs->rules_file, gp->rules_file)) {
 	prefs_set_string (group, "rules_file", prefs->rules_file);
     }
-    if (!gp || !strcmp(prefs->pls_file, gp->pls_file)) {
+    if (!gp || strcmp(prefs->pls_file, gp->pls_file)) {
 	prefs_set_string (group, "pls_file", prefs->pls_file);
     }
-    if (!gp || !strcmp(prefs->relay_ip, gp->relay_ip)) {
+    if (!gp || strcmp(prefs->relay_ip, gp->relay_ip)) {
 	prefs_set_string (group, "relay_ip", prefs->relay_ip);
     }
     /* User agent is treated differently. */
-    if (!gp || !strcmp(prefs->useragent, gp->useragent)) {
+    if (!gp || strcmp(prefs->useragent, gp->useragent)) {
 	if (strcmp(prefs->useragent, DEFAULT_USER_AGENT)) {
 	    prefs_set_string (group, "useragent", prefs->useragent);
 	} else {
 	    prefs_set_string (group, "useragent", "");
 	}
     }
-    if (!gp || !strcmp(prefs->ext_cmd, gp->ext_cmd)) {
+    if (!gp || strcmp(prefs->ext_cmd, gp->ext_cmd)) {
 	prefs_set_string (group, "ext_cmd", prefs->ext_cmd);
     }
 
     prefs_set_integer (group, "relay_port", prefs->relay_port);
     prefs_set_integer (group, "max_port", prefs->max_port);
     prefs_set_integer (group, "max_connections", prefs->max_connections);
-    prefs_set_integer (group, "maxMB_bytes", prefs->maxMB_rip_size);
     prefs_set_integer (group, "maxMB_bytes", prefs->maxMB_rip_size);
     prefs_set_integer (group, "dropcount", prefs->dropcount);
 
@@ -758,16 +764,16 @@ prefs_set_stream_prefs_keyfile (STREAM_PREFS* prefs, STREAM_PREFS* gp,
     prefs_set_integer (group, "xs_padding_2", prefs->sp_opt.xs_padding_2);
 
     /* Codesets */
-    if (!gp || !strcmp(prefs->cs_opt.codeset_metadata, gp->cs_opt.codeset_metadata)) {
+    if (!gp || strcmp(prefs->cs_opt.codeset_metadata, gp->cs_opt.codeset_metadata)) {
 	prefs_set_string (group, "codeset_metadata", prefs->cs_opt.codeset_metadata);
     }
-    if (!gp || !strcmp(prefs->cs_opt.codeset_relay, gp->cs_opt.codeset_relay)) {
+    if (!gp || strcmp(prefs->cs_opt.codeset_relay, gp->cs_opt.codeset_relay)) {
 	prefs_set_string (group, "codeset_relay", prefs->cs_opt.codeset_relay);
     }
-    if (!gp || !strcmp(prefs->cs_opt.codeset_id3, gp->cs_opt.codeset_id3)) {
+    if (!gp || strcmp(prefs->cs_opt.codeset_id3, gp->cs_opt.codeset_id3)) {
 	prefs_set_string (group, "codeset_id3", prefs->cs_opt.codeset_id3);
     }
-    if (!gp || !strcmp(prefs->cs_opt.codeset_filesys, gp->cs_opt.codeset_filesys)) {
+    if (!gp || strcmp(prefs->cs_opt.codeset_filesys, gp->cs_opt.codeset_filesys)) {
 	prefs_set_string (group, "codeset_filesys", prefs->cs_opt.codeset_filesys);
     }
 }

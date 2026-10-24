@@ -110,7 +110,7 @@ compile_rule (Parse_Rule* pr, mchar* rule_string)
     GError *error = NULL;
 
     pr->reg = g_regex_new (rule_string, 
-			   0, 
+			   (pr->flags & PARSERULE_ICASE) ? G_REGEX_CASELESS : 0,
 			   0, 
 			   &error);
     if (error) {
@@ -146,11 +146,13 @@ use_default_rules (RIP_MANAGER_INFO* rmi)
     Parse_Rule* rulep;
 
     /* set global rule list to default */
-    rmi->parse_rules = (Parse_Rule*) malloc (sizeof(m_default_rule_list));
+    rmi->parse_rules = g_malloc (sizeof(m_default_rule_list));
     memcpy (rmi->parse_rules, m_default_rule_list, sizeof(m_default_rule_list));
 
     /* compile regular expressions */
     for (rulep = rmi->parse_rules; rulep->cmd; rulep++) {
+	rulep->match = mstrdup(rulep->match);
+	rulep->subst = mstrdup(rulep->subst);
 	compile_rule (rulep, rulep->match);
     }
 }
@@ -164,8 +166,9 @@ copy_rule_result (mchar* dest, GMatchInfo* match_info, int idx)
 
     debug_printf ("copy_rule_result: idx=%d\n", idx);
     if (idx > 0 && idx <= MAX_SUBMATCHES) {
-	mstrncpy (dest, match, MAX_METADATA_LEN);
+	mstrncpy (dest, match, MAX_TRACK_LEN);
     }
+    g_free(match);
 }
 #else
 static void
@@ -237,7 +240,7 @@ parse_flags (Parse_Rule* pr, char* flags)
 
 	    if (pr->cmd != PARSERULE_CMD_MATCH) return 0;
 	    rc = sscanf (flags, "%d%n", &idx, &nchar);
-	    if (rc == 0 || idx > MAX_SUBMATCHES) {
+	    if (rc != 1 || idx < 1 || idx > MAX_SUBMATCHES) {
 		return 0;
 	    }
 	    flags += nchar;
@@ -311,12 +314,15 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	/* If there are no more rules in the file, */
 	/* this rule will become the sentinel null rule */
 	if (ri+1 != rn) {
-	    rmi->parse_rules = realloc (rmi->parse_rules,
+	    rmi->parse_rules = g_realloc (rmi->parse_rules,
 					(ri+1) * sizeof(Parse_Rule));
 	    memset (&rmi->parse_rules[ri], 0, sizeof(Parse_Rule));
 	    rn = ri+1;
 	}
 
+
+	/* Clear an unused or previously malformed rule before parsing. */
+	memset (&rmi->parse_rules[ri], 0, sizeof(Parse_Rule));
 
 	/* Get next line from file */
 	rp = fgets (rule_buf,2048,fp);
@@ -432,7 +438,9 @@ compose_metadata (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti)
 		       ti->title);
 	}
     } else {
-	debug_printf ("No track info when composing relay metadata\n");
+        debug_printf ("No track info when composing relay metadata\n");
+        ti->composed_metadata[0] = 0;
+        return;
     }
     debug_printf ("Converting relay string to char\n");
     num_bytes = string_from_gstring (rmi, &ti->composed_metadata[1], 
@@ -535,6 +543,7 @@ parse_metadata (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti)
 		rc = g_regex_match (rulep->reg, query_string, 0, &match_info);
 		if (rc == 0) {
 		    /* Didn't match rule. */
+		    g_match_info_free (match_info);
 		    continue;
 		}
 		nmatch = g_match_info_get_match_count (match_info);
@@ -593,6 +602,7 @@ parse_metadata (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti)
 	    rc = g_regex_match (rulep->reg, query_string, 0, &match_info);
 	    if (rc == 0) {
 		/* Didn't match rule. */
+		g_match_info_free (match_info);
 		continue;
 	    }
 	    rc = g_match_info_fetch_pos (match_info, 0, &start_pos, &end_pos);
@@ -612,6 +622,7 @@ parse_metadata (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti)
 	    g_free (tmp);
 	    g_match_info_free (match_info);
 	    mstrncpy (query_string, subst_string, MAX_TRACK_LEN);
+	    g_free (subst_string);
 #else
 	    mchar subst_string[MAX_TRACK_LEN];
 	    int used, left;
@@ -650,6 +661,20 @@ parse_metadata (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti)
 void
 parser_free (RIP_MANAGER_INFO* rmi)
 {
-    free (rmi->parse_rules);
+    Parse_Rule *rulep;
+    if (!rmi->parse_rules) return;
+    for (rulep = rmi->parse_rules; rulep->cmd; rulep++) {
+#if defined (USE_GLIB_REGEX)
+        if (rulep->reg) g_regex_unref(rulep->reg);
+#else
+        if (rulep->reg) {
+            regfree(rulep->reg);
+            free(rulep->reg);
+        }
+#endif
+        g_free(rulep->match);
+        g_free(rulep->subst);
+    }
+    g_free (rmi->parse_rules);
     rmi->parse_rules = 0;
 }

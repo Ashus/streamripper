@@ -371,8 +371,9 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
 
 	    /* Open the file and write header */
 	    if (!writer->m_started) {
-		ripstream_mp3_start_track (rmi, writer);
+		error_code rc = ripstream_mp3_start_track (rmi, writer);
 		writer->m_started = 1;
+                if (rc != SR_SUCCESS) return rc;
 	    }
 
 	    /* Write the data to the file. */
@@ -384,17 +385,21 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
 		    - writer->m_next_byte.offset;
 	    }
 	    write_ptr = ((char*) node->data) + writer->m_next_byte.offset;
-	    filelib_write_track (writer, write_ptr, write_sz);
+            {
+                error_code rc = filelib_write_track (writer, write_ptr, write_sz);
+                if (rc != SR_SUCCESS) return rc;
+            }
 
 	    /* Check if we need to end the track */
 	    if (writer->m_last_byte.node == node) {
 		/* Yes we do, so add id3, close file, etc. */
 		debug_printf ("Ending track\n");
-		ripstream_mp3_end_track (rmi, writer);
+                error_code rc = ripstream_mp3_end_track (rmi, writer);
+                if (rc != SR_SUCCESS) return rc;
 
 		/* Free up writer */
 		free (writer);
-		write_list->head = g_list_delete_link (write_list->head, p);
+		g_queue_delete_link (write_list, p);
 
 	    } else {
 		/* Not end of track, so advance writer pointer */

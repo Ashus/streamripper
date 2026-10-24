@@ -265,9 +265,6 @@ relaylib_start (RIP_MANAGER_INFO* rmi,
 		int have_metadata)
 {
     int ret;
-#ifdef WIN32
-    WSADATA wsd;
-#endif
     RELAYLIB_INFO* rli = &rmi->relaylib_info;
 
     /* GCS: These were globally initialized... */
@@ -278,19 +275,11 @@ relaylib_start (RIP_MANAGER_INFO* rmi,
 
     debug_printf ("relaylib_start()\n");
 
-    rmi->relay_list = g_queue_new ();
-
-#ifdef WIN32
-    if (WSAStartup(MAKEWORD(2,2), &wsd) != 0) {
-	debug_printf ("relaylib_init(): SR_ERROR_CANT_BIND_ON_PORT\n");
-        return SR_ERROR_CANT_BIND_ON_PORT;
-    }
-#endif
-
     if (relay_port < 1 || !port_used) {
 	debug_printf ("relaylib_init(): SR_ERROR_INVALID_PARAM\n");
         return SR_ERROR_INVALID_PARAM;
     }
+    rmi->relay_list = g_queue_new ();
 
 #ifndef WIN32
     // catch a SIGPIPE if send fails
@@ -351,6 +340,11 @@ try_port (RELAYLIB_INFO* rli, u_short port, char *if_name, char *relay_ip)
 	    local.sin_addr.s_addr = htonl(INADDR_ANY);
     } else {
 	he = gethostbyname(relay_ip);
+        if (!he) {
+            closesocket(rli->m_listensock);
+            rli->m_listensock = SOCKET_ERROR;
+            return SR_ERROR_CANT_RESOLVE_HOSTNAME;
+        }
 	memcpy(&local.sin_addr, he->h_addr_list[0], he->h_length);
     }
 
@@ -392,7 +386,7 @@ relaylib_stop (RIP_MANAGER_INFO* rmi)
     RELAYLIB_INFO* rli = &rmi->relaylib_info;
 
     debug_printf("relaylib_stop:start\n");
-    if (!rli->m_running) {
+    if (!rmi->relay_list) {
         debug_printf("***relaylib_stop:return\n");
         return;
     }
@@ -417,10 +411,11 @@ relaylib_stop (RIP_MANAGER_INFO* rmi)
     rli->m_listensock = SOCKET_ERROR;
 
     debug_printf ("waiting for relay close\n");
-    threadlib_waitforclose (&rli->m_hthread_accept);
-    threadlib_waitforclose (&rli->m_hthread_send);
+    if (rli->m_hthread_accept) threadlib_waitforclose (&rli->m_hthread_accept);
+    if (rli->m_hthread_send) threadlib_waitforclose (&rli->m_hthread_send);
     relaylib_free_relay_client_list (rmi);
     threadlib_destroy_sem (&rli->m_sem_not_connected);
+    threadlib_destroy_sem (&rmi->relay_list_sem);
 
     debug_printf("relaylib_stop:done!\n");
 }
@@ -434,18 +429,24 @@ relaylib_start_threads (RIP_MANAGER_INFO* rmi)
     rli->m_running = TRUE;
 
     debug_printf ("Starting accept thread\n");
+    rli->m_running_accept = TRUE;
     ret = threadlib_beginthread (&rli->m_hthread_accept, 
 				 relaylib_accept_thread_main, 
 				 (void*) rmi);
-    if (ret != SR_SUCCESS) return ret;
-    rli->m_running_accept = TRUE;
+    if (ret != SR_SUCCESS) {
+        rli->m_running_accept = FALSE;
+        return ret;
+    }
 
     debug_printf ("Starting send thread\n");
+    rli->m_running_send = TRUE;
     ret = threadlib_beginthread (&rli->m_hthread_send, 
 				 relaylib_send_thread_main,
 				 (void*) rmi);
-    if (ret != SR_SUCCESS) return ret;
-    rli->m_running_send = TRUE;
+    if (ret != SR_SUCCESS) {
+        rli->m_running_send = FALSE;
+        return ret;
+    }
 
     return SR_SUCCESS;
 }
@@ -804,8 +805,6 @@ relaylib_disconnect (RIP_MANAGER_INFO* rmi, GList *node)
     /* Close connection */
     debug_printf ("Trying to close socket.\n");
     debug_printf ("Trying to close socket (%d).\n", relay_client->m_sock);
-    closesocket (relay_client->m_sock);
-
     /* Delete client from list without affecting list order */
     debug_printf ("Trying to delete node from queue\n");
     g_queue_delete_link (rmi->relay_list, node);

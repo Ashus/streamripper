@@ -112,6 +112,11 @@ cbuf3_destroy (struct cbuf3 *cbuf3)
 {
     char *c;
 
+    if (cbuf3->write_list) {
+        g_queue_free_full(cbuf3->write_list, free);
+        cbuf3->write_list = NULL;
+    }
+
     /* Remove buffer */
     if (cbuf3->buf) {
 	while ((c = g_queue_pop_head (cbuf3->buf)) != 0) {
@@ -709,12 +714,13 @@ cbuf3_peek (Cbuf3 *cbuf3,
     cur.offset = ptr->offset;
     while (len > 0) {
 	u_long this_len;
-	char *chunk = (char*) cur.node->data;
+	char *chunk;
 
 	/* Check for overflow */
 	if (!cur.node) {
 	    return SR_ERROR_BUFFER_TOO_SMALL;
 	}
+        chunk = (char*) cur.node->data;
 
 	/* Compute length to peek from this chunk */
 	if (cur.offset + len > cbuf3->chunk_size) {

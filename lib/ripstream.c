@@ -302,7 +302,8 @@ ripstream_end_track (RIP_MANAGER_INFO* rmi, Writer *writer)
     error_code rc;
 
     if (rmi->write_data) {
-        filelib_close (rmi, writer);
+        rc = filelib_close (rmi, writer);
+        if (rc != SR_SUCCESS) return rc;
     }
 
     /* Rename the file to complete, or maybe leave in incomplete */
@@ -355,13 +356,13 @@ get_track_from_metadata (RIP_MANAGER_INFO* rmi, int size, char *newtrack)
     /* Default is no track info */
     *newtrack = 0;
 
-    if ((namebuf = malloc(size)) == NULL)
+    if ((namebuf = calloc((size_t)size + 1, 1)) == NULL)
 	return SR_ERROR_CANT_ALLOC_MEMORY;
 
     ret = ripstream_recvall (rmi, namebuf, size);
-    if (ret <= 0) {
+    if (ret != size) {
 	free(namebuf);
-	return ret;
+	return ret < 0 ? ret : SR_ERROR_RECV_FAILED;
     }
 
     debug_printf ("METADATA TITLE\n");

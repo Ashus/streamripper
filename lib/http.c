@@ -83,10 +83,6 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	    return ret;
 	}
 
-	debug_printf("http_sc_connect(): calling socklib_init\n");
-	if ((ret = socklib_init()) != SR_SUCCESS)
-	    return ret;
-
 	debug_printf ("http_sc_connect(): calling socklib_open"
 		      " host=%s, port=%d\n", url_info.host, url_info.port);
 	ret = socklib_open (sock, url_info.host, url_info.port, if_name, 
@@ -378,15 +374,11 @@ static char*
 make_auth_header (const char *header_name, const char *username, 
 		  const char *password) 
 {
-    char *authbuf = malloc(strlen(header_name) 
-			   + strlen(username)
-			   + strlen(password)
-			   + MAX_URI_STRING);
-    char *auth64;
-    sprintf(authbuf, "%s:%s", username, password);
-    auth64 = b64enc(authbuf, strlen(authbuf));
-    sprintf(authbuf, "%s: Basic %s\r\n", header_name, auth64);
-    free(auth64);
+    char *plain = g_strdup_printf("%s:%s", username, password);
+    char *auth64 = g_base64_encode((const guchar *)plain, strlen(plain));
+    char *authbuf = g_strdup_printf("%s: Basic %s\r\n", header_name, auth64);
+    g_free(plain);
+    g_free(auth64);
     return authbuf;
 }
 
@@ -426,13 +418,22 @@ int
 extract_header_value (char *header, char *dest, char *match, int maxlen)
 {
     char *start = header;
-    size_t len = strlen (match);
+    size_t len = strlen(match);
+    if (maxlen < 1) return 0;
+    dest[0] = 0;
     while (*start) {
-	if (!g_ascii_strncasecmp (start, match, len)) {
-	    subnstr_until (start + len, "\n", dest, maxlen);
-	    return 1;
-	}
-	start ++;
+        char *end = strchr(start, '\n');
+        size_t line_len = end ? (size_t)(end - start) : strlen(start);
+        if (line_len >= len && !g_ascii_strncasecmp(start, match, len)) {
+            size_t value_len = line_len - len;
+            if (value_len >= (size_t)maxlen) value_len = maxlen - 1;
+            memcpy(dest, start + len, value_len);
+            dest[value_len] = 0;
+            g_strstrip(dest);
+            return 1;
+        }
+        if (!end) break;
+        start = end + 1;
     }
     return 0;
 }
@@ -458,21 +459,6 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
 
     memset(info, 0, sizeof(SR_HTTP_HEADER));
 
-    /* The legacy stream reader does not decode HTTP chunk framing. Never
-       let those bytes be interpreted as audio or ICY metadata. */
-    {
-        char transfer[128];
-        if (extract_header_value(header, transfer, "Transfer-Encoding:", sizeof(transfer))) {
-            char *lower = g_ascii_strdown(transfer, -1);
-            int chunked = strstr(lower, "chunked") != NULL;
-            g_free(lower);
-            if (chunked) {
-                fprintf(stderr, "The stream uses unsupported HTTP chunked transfer encoding.\n");
-                return SR_ERROR_NOT_SHOUTCAST_STREAM;
-            }
-        }
-    }
-
     debug_printf("http header:\n%s\n", header);
 
     // Get the ICY code.
@@ -484,8 +470,9 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
 	    return SR_ERROR_NO_RESPONSE_HEADER;
 	}
     }
-    start = strstr (start, " ") + 1;
-    sscanf (start, "%i", &info->icy_code);
+    start = strchr(start, ' ');
+    if (!start || sscanf(start + 1, "%d", &info->icy_code) != 1 ||
+        info->icy_code < 100 || info->icy_code > 599) return SR_ERROR_NO_RESPONSE_HEADER;
     if (info->icy_code >= 400) {
 	switch (info->icy_code) {
 	case 400:
@@ -686,105 +673,33 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
 error_code
 http_construct_sc_response(SR_HTTP_HEADER *info, char *header, int size, int icy_meta_support)
 {
-    char *buf = (char *) malloc (size);
-
-#if defined (commentout)
-    char* test_header = 
-	"HTTP/1.0 200 OK\r\n"
-	"Content-Type: application/ogg\r\n"
-	"ice-audio-info: ice-samplerate=44100\r\n"
-	"ice-bitrate: Quality 0\r\n"
-	"ice-description: This is my server desription\r\n"
-	"ice-genre: Rock\r\n"
-	"ice-name: This is my server desription\r\n"
-	"ice-private: 0\r\n"
-	"ice-public: 1\r\n"
-	"ice-url: http://www.oddsock.org\r\n"
-	"Server: Icecast 2.0.1\r\n\r\n";
-#endif
-
-    if (!info || !header || size < 1) {
-	free (buf);
-	return SR_ERROR_INVALID_PARAM;
-    }
-
-    memset(header, 0, size);
-
-    /* GCS: The code used to give HTTP instead of ICY for the response header, 
-	like this: sprintf(buf, "HTTP/1.0 200 OK\r\n"); */
-    sprintf (buf, "ICY 200 OK\r\n");
-    strcat(header, buf);
-
-    if (info->http_location[0])
-    {
-	sprintf(buf, "Location:%s\r\n", info->http_location);
-	strcat(header, buf);
-    }
-
-    if (info->server[0])
-    {
-	sprintf(buf, "Server:%s\r\n", info->server);
-	strcat(header, buf);
-    }
-
-    if (info->have_icy_name) {
-	sprintf(buf, "icy-name:%s\r\n", info->icy_name);
-	strcat(header, buf);
-    }
-
-    if (info->icy_url[0])
-    {
-	sprintf(buf, "icy-url:%s\r\n", info->icy_url);
-	strcat(header, buf);
-    }
-
-    if (info->icy_bitrate)
-    {
-	sprintf(buf, "icy-br:%d\r\n", info->icy_bitrate);
-	strcat(header, buf);
-    }
-
-    if (info->icy_genre[0])
-    {
-	sprintf(buf, "icy-genre:%s\r\n", info->icy_genre);
-	strcat(header, buf);
-    }
-
-    if ((info->meta_interval > 0) && icy_meta_support)
-    {
-	sprintf(buf, "icy-metaint:%d\r\n", info->meta_interval);
-	strcat(header, buf);
-    }
-
+    GString *response;
+    const char *type = "audio/mpeg";
+    if (!info || !header || size < 1) return SR_ERROR_INVALID_PARAM;
+    response = g_string_new("ICY 200 OK\r\n");
+    if (info->http_location[0]) g_string_append_printf(response, "Location:%s\r\n", info->http_location);
+    if (info->server[0]) g_string_append_printf(response, "Server:%s\r\n", info->server);
+    if (info->have_icy_name) g_string_append_printf(response, "icy-name:%s\r\n", info->icy_name);
+    if (info->icy_url[0]) g_string_append_printf(response, "icy-url:%s\r\n", info->icy_url);
+    if (info->icy_bitrate) g_string_append_printf(response, "icy-br:%d\r\n", info->icy_bitrate);
+    if (info->icy_genre[0]) g_string_append_printf(response, "icy-genre:%s\r\n", info->icy_genre);
+    if (info->meta_interval > 0 && icy_meta_support)
+        g_string_append_printf(response, "icy-metaint:%d\r\n", info->meta_interval);
     switch (info->content_type) {
-    case CONTENT_TYPE_MP3:
-	sprintf (buf, "Content-Type: audio/mpeg\r\n");
-	strcat(header, buf);
-	break;
-    case CONTENT_TYPE_NSV:
-	sprintf (buf, "Content-Type: video/nsv\r\n");
-	strcat(header, buf);
-	break;
-    case CONTENT_TYPE_OGG:
-	sprintf (buf, "Content-Type: application/ogg\r\n");
-	strcat(header, buf);
-	break;
-    case CONTENT_TYPE_ULTRAVOX:
-	sprintf (buf, "Content-Type: misc/ultravox\r\n");
-	strcat(header, buf);
-	break;
-    case CONTENT_TYPE_AAC:
-	sprintf (buf, "Content-Type: audio/aac\r\n");
-	strcat(header, buf);
-	break;
+    case CONTENT_TYPE_OGG: type = "application/ogg"; break;
+    case CONTENT_TYPE_AAC: type = "audio/aac"; break;
+    case CONTENT_TYPE_NSV: type = "video/nsv"; break;
+    case CONTENT_TYPE_ULTRAVOX: type = "misc/ultravox"; break;
+    default: break;
     }
-
-    free(buf);
-    strcat(header, "\r\n");
-
-    debug_printf ("Constructed response header:\n");
-    debug_printf ("%s", header);
-
+    g_string_append_printf(response, "Content-Type: %s\r\n\r\n", type);
+    if (response->len >= (size_t)size) {
+        header[0] = 0;
+        g_string_free(response, TRUE);
+        return SR_ERROR_BUFFER_TOO_SMALL;
+    }
+    memcpy(header, response->str, response->len + 1);
+    g_string_free(response, TRUE);
     return SR_SUCCESS;
 }
 

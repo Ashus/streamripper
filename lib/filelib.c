@@ -306,28 +306,17 @@ filelib_start (RIP_MANAGER_INFO* rmi, Writer *writer, TRACK_INFO* ti)
 error_code
 filelib_write_cue (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti, int secs)
 {
-    FILELIB_INFO* fli = &rmi->filelib_info;
-    int rc;
-    char buf1[MAX_TRACK_LEN];
-    char buf2[MAX_TRACK_LEN];
-
-    if (!fli->m_do_show) return SR_SUCCESS;
-    if (!fli->m_cue_file) return SR_SUCCESS;
-
-    rc = snprintf (buf2, MAX_TRACK_LEN, "  TRACK %02d AUDIO\n", 
-		   fli->m_track_no++);
-    filelib_write (fli->m_cue_file, buf2, rc);
-    string_from_gstring (rmi, buf1, MAX_TRACK_LEN, ti->title, CODESET_ID3);
-    rc = snprintf (buf2, MAX_TRACK_LEN, "    TITLE \"%s\"\n", buf1);
-    filelib_write (fli->m_cue_file, buf2, rc);
-    string_from_gstring (rmi, buf1, MAX_TRACK_LEN, ti->artist, CODESET_ID3);
-    rc = snprintf (buf2, MAX_TRACK_LEN, "    PERFORMER \"%s\"\n", buf1);
-    filelib_write (fli->m_cue_file, buf2, rc);
-    rc = snprintf (buf2, MAX_TRACK_LEN, "    INDEX 01 %02d:%02d:00\n", 
-		   secs / 60, secs % 60);
-    filelib_write (fli->m_cue_file, buf2, rc);
-
-    return SR_SUCCESS;
+    FILELIB_INFO *fli = &rmi->filelib_info;
+    GString *cue;
+    error_code rc;
+    if (!fli->m_do_show || fli->m_cue_file == INVALID_FHANDLE) return SR_SUCCESS;
+    cue = g_string_new(NULL);
+    g_string_append_printf(cue, "  TRACK %02d AUDIO\n    TITLE \"%s\"\n"
+                           "    PERFORMER \"%s\"\n    INDEX 01 %02d:%02d:00\n",
+                           fli->m_track_no++, ti->title, ti->artist, secs / 60, secs % 60);
+    rc = filelib_write(fli->m_cue_file, cue->str, cue->len);
+    g_string_free(cue, TRUE);
+    return rc;
 }
 
 error_code
@@ -451,6 +440,13 @@ filelib_close (
 void
 filelib_shutdown (RIP_MANAGER_INFO* rmi)
 {
+    GList *node;
+    if (rmi->cbuf3.write_list) {
+        for (node = rmi->cbuf3.write_list->head; node; node = node->next) {
+            Writer *writer = node->data;
+            if (writer->m_started) filelib_close(rmi, writer);
+        }
+    }
     close_files (rmi);
 }
 
@@ -1150,28 +1146,20 @@ filelib_open_for_write (RIP_MANAGER_INFO* rmi, FHANDLE* fp, gchar* filename)
 static error_code
 filelib_write (FHANDLE fp, char *buf, u_long size)
 {
-    if (!fp) {
-	debug_printf("filelib_write: fp = 0\n");
-	return SR_ERROR_CANT_WRITE_TO_FILE;
-    }
+    if (fp == INVALID_FHANDLE) return SR_ERROR_CANT_WRITE_TO_FILE;
+    while (size) {
 #if WIN32
-    {
-	BOOL rc;
-	DWORD bytes_written = 0;
-	rc = WriteFile (fp, buf, size, &bytes_written, NULL);
-	if (rc == 0) {
-	    debug_print_error ();
-	    debug_printf ("filelib_write: WriteFile rc = 0\n");
-	    debug_printf ("size = %d, bytes_written = %d\n", 
-			 size, bytes_written);
-	    return SR_ERROR_CANT_WRITE_TO_FILE;
-	}
-    }
+        DWORD count = 0;
+        if (!WriteFile(fp, buf, size, &count, NULL) || !count)
+            return SR_ERROR_CANT_WRITE_TO_FILE;
 #else
-    if (write (fp, buf, size) == -1)
-	return SR_ERROR_CANT_WRITE_TO_FILE;
+        ssize_t count = write(fp, buf, size);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) return SR_ERROR_CANT_WRITE_TO_FILE;
 #endif
-
+        buf += count;
+        size -= count;
+    }
     return SR_SUCCESS;
 }
 
@@ -1354,7 +1342,8 @@ filelib_open_showfiles (RIP_MANAGER_INFO* rmi)
 		       fli->m_show_name, basename);
 	rc = msnprintf (mcue_buf, 1024, m_("FILE \"") m_S m_("\" MP3\n"), 
 			basename);
-	rc = string_from_gstring (rmi, cue_buf, 1024, mcue_buf, CODESET_FILESYS);
+	g_strlcpy(cue_buf, mcue_buf, sizeof(cue_buf));
+        rc = strlen(cue_buf);
 	rc = filelib_write (fli->m_cue_file, cue_buf, rc);
 	if (rc != SR_SUCCESS) {
 	    fli->m_do_show = 0;
@@ -1506,7 +1495,7 @@ static void
 remove_trailing_periods (gchar *str)
 {
     gchar* s = str + strlen (str);
-    while (--s >= str && *s == '.') {
-	*s = 0;
+    while (s > str && s[-1] == '.') {
+	*--s = 0;
     }
 }

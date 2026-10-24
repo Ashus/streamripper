@@ -125,6 +125,11 @@ main (int argc, char *argv[])
 
     rip_manager_stop (rmi);
     rip_manager_cleanup ();
+    prefs_cleanup();
+    free(rmi);
+#ifdef SR_MODERN_WINDOWS
+    g_strfreev(argv);
+#endif
 
     return 0;
 }

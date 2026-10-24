@@ -545,6 +545,7 @@ struct RIP_MANAGER_INFOst
 
     /* Is rip manager active? */
     int started;
+    BOOL stopped;
     HSEM started_sem;
 
     /* Info from stream http header.  It's used for generating relay 

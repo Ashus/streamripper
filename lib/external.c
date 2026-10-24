@@ -93,11 +93,11 @@ parse_external_byte (RIP_MANAGER_INFO* rmi, External_Process* ep,
 	    ep->title_buf[0] = 0;
 	    got_metadata = 1;
 	} else if (!strncmp ("ARTIST=", ep->line_buf, strlen("ARTIST="))) {
-	    strcpy (ep->artist_buf, &ep->line_buf[strlen("ARTIST=")]);
+	    g_strlcpy (ep->artist_buf, &ep->line_buf[strlen("ARTIST=")], sizeof(ep->artist_buf));
 	} else if (!strncmp ("ALBUM=", ep->line_buf, strlen("ALBUM="))) {
-	    strcpy (ep->album_buf, &ep->line_buf[strlen("ALBUM=")]);
+	    g_strlcpy (ep->album_buf, &ep->line_buf[strlen("ALBUM=")], sizeof(ep->album_buf));
 	} else if (!strncmp ("TITLE=", ep->line_buf, strlen("TITLE="))) {
-	    strcpy (ep->title_buf, &ep->line_buf[strlen("TITLE=")]);
+	    g_strlcpy (ep->title_buf, &ep->line_buf[strlen("TITLE=")], sizeof(ep->title_buf));
 	}
 	ep->line_buf[0] = 0;
 	ep->line_buf_idx = 0;
@@ -146,6 +146,8 @@ spawn_external (char* cmd)
     /* Create a pipe for the child process's STDIN. */
     if (!CreatePipe (&hChildStdinRd, &hChildStdinWr, &saAttr, 0)) {
         debug_printf ("Stdin pipe creation failed\n");
+        CloseHandle(ep->mypipe);
+        CloseHandle(hChildStdoutWr);
 	free (ep);
 	return 0;
     }
@@ -179,8 +181,12 @@ spawn_external (char* cmd)
 		NULL,           // use parent's current directory 
 		&startup_info,  // STARTUPINFO pointer
 		&piProcInfo);   // receives PROCESS_INFORMATION 
+    CloseHandle(hChildStdinRd);
+    CloseHandle(hChildStdinWr);
+    CloseHandle(hChildStdoutWr);
     if (rc == 0) {
         debug_printf ("CreateProcess() failed\n");
+        CloseHandle(ep->mypipe);
 	free (ep);
 	return 0;
     }
@@ -249,6 +255,7 @@ close_external (External_Process** epp)
 	debug_printf ("Terminated process: %d\n", rc);
     }
     CloseHandle (ep->hproc);
+    CloseHandle (ep->mypipe);
 
     free (ep);
     *epp = 0;

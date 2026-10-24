@@ -33,11 +33,40 @@
 /******************************************************************************
  * Public functions
  *****************************************************************************/
+#ifdef WIN32
+struct thread_start {
+    void (*callback)(void *);
+    void *arg;
+};
+
+static unsigned __stdcall thread_entry(void *data)
+{
+    struct thread_start *start = data;
+    void (*callback)(void *) = start->callback;
+    void *arg = start->arg;
+    free(start);
+    callback(arg);
+    return 0;
+}
+#endif
+
 error_code
 threadlib_beginthread (THREAD_HANDLE *thread, void (*callback)(void *), 
 		       void* arg)
 {
-    BeginThread (*thread, callback, arg);
+#ifdef WIN32
+    struct thread_start *start = malloc(sizeof(*start));
+    if (!start) return SR_ERROR_CANT_ALLOC_MEMORY;
+    start->callback = callback;
+    start->arg = arg;
+    *thread = (HANDLE)_beginthreadex(NULL, 0, thread_entry, start, 0, NULL);
+    if (!*thread) {
+        free(start);
+        return SR_ERROR_CANT_CREATE_THREAD;
+    }
+#else
+    if (BeginThread (*thread, callback, arg)) return SR_ERROR_CANT_CREATE_THREAD;
+#endif
     //if (thread->thread_handle == NULL)	// don't feel like porting this
     //	return SR_ERROR_CANT_CREATE_THREAD;
 
@@ -48,6 +77,10 @@ void
 threadlib_waitforclose (THREAD_HANDLE *thread)
 {
     WaitForThread (*thread);
+#ifdef WIN32
+    CloseHandle(*thread);
+    *thread = NULL;
+#endif
 }
 
 HSEM
@@ -79,5 +112,5 @@ threadlib_signal_sem(HSEM *e)
 void
 threadlib_destroy_sem (HSEM *e)
 {
-    DestroyThread (*e);
+    SemDestroy (*e);
 }

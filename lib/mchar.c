@@ -72,7 +72,7 @@ subnstr_until(const char *str, char *until, char *newstr, int maxlen)
     const char *p = str;
     int len = 0;
 
-    for (len = 0; strncmp(p, until, strlen(until)) != 0 && len < maxlen-1; p++)
+    for (len = 0; *p && strncmp(p, until, strlen(until)) != 0 && len < maxlen-1; p++)
     {
 	newstr[len] = *p;
 	len++;
@@ -276,6 +276,7 @@ convert_string_with_replacement
 			      error->code, error->message);
 		g_error_free (error);
 		g_free (repl_string);
+                g_iconv_close(giconv);
 		return;
 	    }
 	    /* How many bytes to try next time? */
@@ -310,12 +311,12 @@ convert_string_with_replacement
 		/* A successful conversion. */
 		debug_printf ("Successful conversion: %d bytes read\n", br);
 		gmem_concat (output_string, *output_bytes, os, bw);
-		g_free (os);
 		cur += br;
 		bytes_to_convert = input_bytes - cur;
 		*output_bytes += bw;
 		need_repl = 1;
 	    }
+            g_free(os);
 	}
 
 	/* drop_byte will be true if a conversion failure happened.  
