@@ -131,6 +131,10 @@ cbuf3_destroy (struct cbuf3 *cbuf3)
     }
 
     /* Remove ogg page references */
+    if (cbuf3->metadata_list) {
+        g_queue_free_full(cbuf3->metadata_list, free);
+        cbuf3->metadata_list = NULL;
+    }
     if (cbuf3->ogg_page_refs) {
 	while ((c = g_queue_pop_head (cbuf3->ogg_page_refs)) != 0) {
 	    free (c);
@@ -138,6 +142,12 @@ cbuf3_destroy (struct cbuf3 *cbuf3)
 	g_queue_free (cbuf3->ogg_page_refs);
 	cbuf3->ogg_page_refs = 0;
     }
+#ifdef SR_MODERN_WINDOWS
+    if (cbuf3->sem) {
+        threadlib_destroy_sem(&cbuf3->sem);
+        cbuf3->sem = NULL;
+    }
+#endif
 }
 
 void
@@ -285,6 +295,18 @@ cbuf3_extract_oldest_node (RIP_MANAGER_INFO *rmi,
     }
 
     /* Remove the chunk */
+    if (cbuf3->metadata_list) {
+        for (GList *entry = cbuf3->metadata_list->head; entry; entry = entry->next) {
+            Metadata *metadata = entry->data;
+            if (metadata->m_node == cbuf3->buf->head) metadata->m_node = cbuf3->buf->head->next;
+        }
+        while (cbuf3->metadata_list->head && cbuf3->metadata_list->head->next) {
+            Metadata *first = cbuf3->metadata_list->head->data;
+            Metadata *second = cbuf3->metadata_list->head->next->data;
+            if (first->m_node != second->m_node) break;
+            free(g_queue_pop_head(cbuf3->metadata_list));
+        }
+    }
     node = g_queue_pop_head_link (cbuf3->buf);
 
     /* Done */
@@ -596,10 +618,10 @@ cbuf3_initialize_relay_client_ptr (struct cbuf3 *cbuf3,
 	burst_amt += cbuf3->chunk_size;
 
 	while (burst_amt < burst_request) {
-	    node_ptr = node_ptr->prev;
-	    if (!node_ptr) {
+	    if (!node_ptr->prev) {
 		break;
 	    }
+            node_ptr = node_ptr->prev;
 	    burst_amt += cbuf3->chunk_size;
 	}
 
@@ -628,6 +650,10 @@ cbuf3_extract_relay (Cbuf3 *cbuf3,
     debug_printf ("EXTRACT_RELAY\n");
 
     node = relay_client->m_cbuf_ptr.node;
+    if (!node) {
+        threadlib_signal_sem(&cbuf3->sem);
+        return SR_ERROR_BUFFER_EMPTY;
+    }
     offset = relay_client->m_cbuf_ptr.offset;
     chunk = (char*) node->data;
     remaining = cbuf3->chunk_size - offset;
@@ -639,6 +665,24 @@ cbuf3_extract_relay (Cbuf3 *cbuf3,
 	debug_printf ("Client %d node %p\n", relay_client->m_sock, node);
 	memcpy (relay_client->m_buffer, &chunk[offset], remaining);
 	relay_client->m_left_to_send = remaining;
+        if (relay_client->m_icy_metadata) {
+            Metadata *active = NULL;
+            for (GList *chunk_node = cbuf3->buf->head; chunk_node; chunk_node = chunk_node->next) {
+                for (GList *entry = cbuf3->metadata_list->head; entry; entry = entry->next) {
+                    Metadata *metadata = entry->data;
+                    if (metadata->m_node == chunk_node) active = metadata;
+                }
+                if (chunk_node == node) break;
+            }
+            size_t length = active ? (unsigned char)active->m_composed_metadata[0] * 16u + 1u : 1u;
+            if (remaining + length > relay_client->m_buffer_size) {
+                threadlib_signal_sem(&cbuf3->sem);
+                return SR_ERROR_BUFFER_FULL;
+            }
+            if (active) memcpy(relay_client->m_buffer + remaining, active->m_composed_metadata, length);
+            else relay_client->m_buffer[remaining] = 0;
+            relay_client->m_left_to_send += length;
+        }
 	relay_client->m_cbuf_ptr.node = node->next;
 	relay_client->m_cbuf_ptr.offset = 0;
 	ec = SR_SUCCESS;

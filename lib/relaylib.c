@@ -204,7 +204,8 @@ swallow_receive (int sock)
             if (ret > 0) {
                 hasmore = TRUE;
             }
-            else if (ret == SOCKET_ERROR) {
+            else if (ret <= 0) {
+                ret = SOCKET_ERROR;
                 break;
             }
         }
@@ -307,17 +308,17 @@ relaylib_start (RIP_MANAGER_INFO* rmi,
     //m_max_connections = max_connections;
     //m_have_metadata = have_metadata;
     *port_used = 0;
-    if (!search_ports)
+    if (!search_ports || max_port < relay_port)
         max_port = relay_port;
 
-    for(;relay_port <= max_port; relay_port++) {
-        ret = try_port (rli, (u_short) relay_port, if_name, relay_ip);
+    for(unsigned int port = relay_port; port <= max_port; port++) {
+        ret = try_port (rli, (u_short) port, if_name, relay_ip);
         if (ret == SR_ERROR_CANT_BIND_ON_PORT)
             continue;           // Keep searching.
 
         if (ret == SR_SUCCESS) {
-            *port_used = relay_port;
-            debug_printf ("Relay: Listening on port %d\n", relay_port);
+            *port_used = (u_short) port;
+            debug_printf ("Relay: Listening on port %u\n", port);
             ret = SR_SUCCESS;
 
 	    if (!rli->m_running) {
@@ -396,6 +397,7 @@ relaylib_stop (RIP_MANAGER_INFO* rmi)
         return;
     }
     rli->m_running = FALSE;
+    threadlib_signal_sem (&rli->m_sem_not_connected);
     ix = 0;
     while (ix<120 && (rli->m_running_accept | rli->m_running_send)) {
         sleep(1);
@@ -714,6 +716,7 @@ relaylib_fill_client_buffer (RIP_MANAGER_INFO* rmi, Relay_client *relay_client)
 	//return cbuf3_extract_relay_ogg (cbuf3, relay_client);
     } else {
 	//return cbuf2_extract_relay_mp3 (cbuf2, ptr);
+        return cbuf3_extract_relay(cbuf3, relay_client);
     }
     return SR_SUCCESS;
 }
@@ -745,7 +748,7 @@ relaylib_send (RIP_MANAGER_INFO* rmi, Relay_client *relay_client)
 	    relay_client->m_offset = 0;
 	    rc = relaylib_fill_client_buffer (rmi, relay_client);
 	    
-	    if (rc == SR_ERROR_BUFFER_EMPTY) {
+	    if (rc != SR_SUCCESS || !relay_client->m_left_to_send) {
 		debug_printf ("Buffer is empty\n");
 		break;
 	    }
@@ -778,6 +781,7 @@ relaylib_send (RIP_MANAGER_INFO* rmi, Relay_client *relay_client)
 	    }
 	    done = 1;
 	} else { 
+	    if (ret == 0) break;
 	    // Send was successful
 	    relay_client->m_offset += ret;
 	    relay_client->m_left_to_send -= ret;
@@ -828,6 +832,7 @@ relaylib_send_thread_main (void* arg)
 
 	node = rmi->relay_list->head;
 	while (node) {
+	    GList *current = node;
 	    Relay_client *relay_client = (Relay_client*) node->data;
 	    int sock = relay_client->m_sock;
 	    node = node->next;
@@ -835,7 +840,8 @@ relaylib_send_thread_main (void* arg)
 	    if (swallow_receive (sock) != 0) {
 		debug_printf ("Relay: Client %d disconnected (%s)\n", 
 			      sock, strerror(errno));
-		relaylib_disconnect (rmi, node);
+		relaylib_disconnect (rmi, current);
+                continue;
 	    }
 	    relaylib_send (rmi, relay_client);
 	}

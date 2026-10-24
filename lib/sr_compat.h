@@ -75,9 +75,15 @@
 #define DestroyThread(_thandle_)	CloseHandle(_thandle_)
 
 #define HSEM			HANDLE
+#ifdef SR_MODERN_WINDOWS
+#define SemInit(_s_) {_s_ = CreateSemaphore(NULL, 0, 1, NULL);}
+#define SemWait(_s_) WaitForSingleObject(_s_, INFINITE)
+#define SemPost(_s_) ReleaseSemaphore(_s_, 1, NULL)
+#else
 #define	SemInit(_s_)	{_s_ = CreateEvent(NULL, TRUE, FALSE, NULL);}
 #define	SemWait(_s_)	{WaitForSingleObject(_s_, INFINITE); ResetEvent(_s_);}
 #define	SemPost(_s_)	SetEvent(_s_)
+#endif
 #define	SemDestroy(_s_)	CloseHandle(_s_)
 #define sleep(x) 	Sleep(1000*x)
 
