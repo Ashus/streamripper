@@ -6,6 +6,7 @@
 #include "rip_manager.h"
 #include "ripstream_wav.h"
 #include "http.h"
+#include "findsep.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <psapi.h>
@@ -64,6 +65,18 @@ static void parser_cycle(RIP_MANAGER_INFO *rmi)
 
 int main(int argc, char **argv)
 {
+    if (argc == 3 && !strcmp(argv[1], "--silence")) {
+        gchar *audio = NULL;
+        gsize size;
+        u_long start, end;
+        CHECK(g_file_get_contents(argv[2], &audio, &size, NULL));
+        CHECK(size > 16000);
+        findsep_silence(audio, size, 0, 1000, 50, 0, 0, &start, &end);
+        findsep_silence_2(audio, size, 0, 1000, 50, 0, 0, &start, &end);
+        g_free(audio);
+        puts("Both silence detectors completed.");
+        return 0;
+    }
     if (argc == 5 && !strcmp(argv[1], "--decode"))
         return decode_file(argv[2], argv[3], atoi(argv[4]));
     if (argc == 4 && !strcmp(argv[1], "--stress-decode")) {

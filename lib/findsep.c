@@ -38,9 +38,6 @@
 #define READSIZE	2000
 // #define READSIZE	1000
 
-/* Uncomment to dump an mp3 of the search window. */
-#define MAKE_DUMP_MP3 1
-
 typedef struct FRAME_LIST_struct FRAME_LIST;
 struct FRAME_LIST_struct
 {
@@ -204,14 +201,6 @@ findsep_silence (const char* mpgbuf,
 	mpgbuf, mpgbuf+mpgsize, mpgsize);
 
     init_siltrackers(ds.siltrackers);
-
-#if defined (MAKE_DUMP_MP3)
-    {
-	FILE* fp = fopen("dump.mp3", "wb");
-	fwrite(mpgbuf, mpgsize, 1, fp);
-	fclose(fp);
-    }
-#endif
 
     /* Run decoder */
     mad_decoder_init (&decoder, &ds, input, header, filter, output, 

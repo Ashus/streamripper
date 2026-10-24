@@ -36,9 +36,6 @@
 #define READSIZE	2000
 // #define READSIZE	1000
 
-/* Uncomment to dump an mp3 of the search window. */
-//   #define MAKE_DUMP_MP3 1
-
 typedef struct FRAME_LIST_struct FRAME_LIST;
 struct FRAME_LIST_struct
 {
@@ -149,14 +146,6 @@ findsep_silence_2 (const char* mpgbuf,
     INIT_LIST_HEAD (&ds.frame_list);
 
     debug_printf ("FINDSEP 2: %p -> %p (%d)\n", mpgbuf, mpgbuf+mpgsize, mpgsize);
-
-#if defined (MAKE_DUMP_MP3)
-    {
-	FILE* fp = fopen("dump.mp3", "wb");
-	fwrite(mpgbuf, mpgsize, 1, fp);
-	fclose(fp);
-    }
-#endif
 
     /* Run decoder */
     mad_decoder_init(&decoder, &ds,
@@ -296,20 +285,9 @@ input(void *data, struct mad_stream *ms)
 	       we'll nudge along the buffer to try to resync.
          */
 	if (frameoffset == READSIZE) {
-	    if (!ds->samplerate) {
-		frameoffset--;
-	    } else {
-		FILE* fp;
-		debug_printf ("%p | %p | %p | %p | %d\n",
-		    ds->mpgbuf, ds->mpgpos, &(ds->mpgbuf[ds->mpgpos]), 
-		    ms->next_frame, frameoffset);
-    		fprintf (stderr, "ERROR: frameoffset != READSIZE\n");
-		debug_printf ("ERROR: frameoffset != READSIZE\n");
-		fp = fopen ("gcs1.txt","w");
-		fwrite(ds->mpgbuf,1,ds->mpgsize,fp);
-		fclose(fp);
-		exit (-1);
-	    }
+	    /* Recover without dumping data or aborting the recording process. */
+	    debug_printf ("Silence decoder made no progress; resynchronizing\n");
+	    frameoffset--;
 	}
     }
     debug_printf ("%p | %p | %p |< %p | %p >| %d\n",
@@ -571,4 +549,3 @@ error(void *data, struct mad_stream *ms, struct mad_frame *frame)
     debug_printf("unrecoverable mad error 0x%04x\n", ms->error);
     return MAD_FLOW_BREAK;
 }
-
