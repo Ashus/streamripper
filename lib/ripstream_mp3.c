@@ -33,6 +33,7 @@
 #include "ripstream_mp3.h"
 #include "debug.h"
 #include "filelib.h"
+#include "framed_audio.h"
 #include "relaylib.h"
 #include "socklib.h"
 #include "external.h"
@@ -216,7 +217,8 @@ ripstream_mp3_rip (RIP_MANAGER_INFO* rmi)
     }
 
     /* Check for track change. */
-    ripstream_mp3_check_for_track_change (rmi);
+    rc = ripstream_mp3_check_for_track_change (rmi);
+    if (rc != SR_SUCCESS) return rc;
 
     /* If buffer is full, write oldest node to disk */
     rc = ripstream_mp3_write_oldest_node (rmi);
@@ -244,6 +246,7 @@ ripstream_mp3_start_track (RIP_MANAGER_INFO* rmi, Writer *writer)
 {
     TRACK_INFO *ti = &writer->m_ti;
     error_code rc;
+    gint64 tlen_offset = -1;
 
     debug_printf ("ripstream_mp3_start_track (starting)\n");
 
@@ -282,30 +285,37 @@ ripstream_mp3_start_track (RIP_MANAGER_INFO* rmi, Writer *writer)
 	/* Lead performer */
         rc = write_id3v2_frame (rmi, writer, "TPE1", 
 				ti->artist, id3_charset, &sent);
+        if (rc != SR_SUCCESS) return rc;
 
         /* Title */
         rc = write_id3v2_frame (rmi, writer, "TIT2", 
 				ti->title, id3_charset, &sent);
+        if (rc != SR_SUCCESS) return rc;
 
         /* Encoded by */
         rc = write_id3v2_frame (rmi, writer, "TENC",
 				m_("Ripped with Streamripper"), 
 				id3_charset, &sent);
+        if (rc != SR_SUCCESS) return rc;
 	
         /* Album */
         rc = write_id3v2_frame (rmi, writer, "TALB", 
 				ti->album, id3_charset, &sent);
+        if (rc != SR_SUCCESS) return rc;
 
         /* Track */
         rc = write_id3v2_frame (rmi, writer, "TRCK", 
 				ti->track_a, id3_charset, &sent);
+        if (rc != SR_SUCCESS) return rc;
 
         /* Year */
         rc = write_id3v2_frame (rmi, writer, "TYER", 
 				ti->year, id3_charset, &sent);
+        if (rc != SR_SUCCESS) return rc;
 
 	/* Zero out padding */
 	memset (bigbuf, '\000', sizeof(bigbuf));
+	if (HEADER_SIZE - sent >= 32) tlen_offset = 10 + sent;
 
 	/* Pad up to header_size */
 	rc = filelib_write_track (writer, bigbuf, HEADER_SIZE-sent);
@@ -314,6 +324,10 @@ ripstream_mp3_start_track (RIP_MANAGER_INFO* rmi, Writer *writer)
 	}
     }
 
+    if (!rmi->prefs->wav && (rmi->http_info.content_type == CONTENT_TYPE_MP3 ||
+                            rmi->http_info.content_type == CONTENT_TYPE_AAC))
+        return framed_audio_init(&writer->m_audio, writer->m_file,
+                                 rmi->http_info.content_type, tlen_offset);
     return SR_SUCCESS;
 }
 
@@ -541,7 +555,19 @@ find_sep (RIP_MANAGER_INFO* rmi,
 	rw_size
     );
 
-    if (rmi->http_info.content_type != CONTENT_TYPE_MP3) {
+    if (rmi->http_info.content_type == CONTENT_TYPE_AAC) {
+        unsigned char *buf = g_malloc(rw_size);
+        size_t boundary = rw_size / 2;
+        rc = cbuf3_peek(cbuf3, (char *)buf, &rw_start, rw_size);
+        if (rc == SR_SUCCESS)
+            framed_audio_adts_boundary(buf, rw_size, boundary, &boundary);
+        g_free(buf);
+        if (rc != SR_SUCCESS) return rc;
+        /* End pointers are exclusive: adjacent tracks share the same boundary. */
+        rc = cbuf3_pointer_add(cbuf3, end_of_previous, &rw_start, boundary);
+        if (rc != SR_SUCCESS) return rc;
+        *start_of_next = *end_of_previous;
+    } else if (rmi->http_info.content_type != CONTENT_TYPE_MP3) {
 	long midpoint = rw_size / 2;
 	debug_printf ("(not mp3) taking middle: sw_sil=%d\n", midpoint);
 	cbuf3_pointer_add (cbuf3, end_of_previous, &rw_start, midpoint - 1);
@@ -582,9 +608,19 @@ find_sep (RIP_MANAGER_INFO* rmi,
 		&pos1, &pos2);
 	}
 
-	cbuf3_pointer_add (cbuf3, end_of_previous, &rw_start, pos1);
-	cbuf3_pointer_add (cbuf3, start_of_next, &rw_start, pos2);
+	if (rc != SR_SUCCESS) { free(buf); return rc; }
+	/* Silence detectors return an inclusive last byte; writers use an
+	   exclusive end. Without this conversion the last frame loses a byte. */
+	pos1 = pos1 == (u_long)-1 ? 0 : pos1 + 1;
+	if (pos1 > bufsize || pos2 > bufsize) {
+	    free(buf);
+	    return SR_ERROR_DECODE_FAILURE;
+	}
+	rc = cbuf3_pointer_add (cbuf3, end_of_previous, &rw_start, pos1);
+	if (rc == SR_SUCCESS)
+	    rc = cbuf3_pointer_add (cbuf3, start_of_next, &rw_start, pos2);
 	free(buf);
+	if (rc != SR_SUCCESS) return rc;
     }
 
     return SR_SUCCESS;
@@ -595,6 +631,10 @@ ripstream_mp3_end_track (RIP_MANAGER_INFO* rmi,
     Writer* writer)
 {
     error_code rc;
+
+    /* Flush complete audio frames and patch duration before appending ID3v1. */
+    rc = framed_audio_finish(&writer->m_audio);
+    if (rc != SR_SUCCESS) return rc;
 
     /* Add id3v1 if requested */
     if (GET_ADD_ID3V1(rmi->prefs->flags)) {
@@ -646,6 +686,9 @@ write_id3v2_frame (RIP_MANAGER_INFO *rmi,
     strncpy(id3v2frame.id, tag_name, 4);
     id3v2frame.pad[2] = charset;
     rc = string_from_gstring (rmi, bigbuf, HEADER_SIZE, data, CODESET_ID3);
+    if (rc < 0) return SR_ERROR_DECODE_FAILURE;
+    /* Keep the fixed ID3v2 extent valid and reserve room for the final TLEN. */
+    if (*sent + 11 + rc > HEADER_SIZE - 32) return SR_SUCCESS;
     framesize = htonl (rc+1);
     ret = filelib_write_track (writer, (char *)&(id3v2frame.id), 4);
     if (ret != SR_SUCCESS) return ret;

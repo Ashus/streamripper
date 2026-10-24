@@ -8,6 +8,7 @@
 #include "http.h"
 #include "findsep.h"
 #include "track_info.h"
+#include "framed_audio.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <psapi.h>
@@ -66,6 +67,55 @@ static void parser_cycle(RIP_MANAGER_INFO *rmi)
 
 int main(int argc, char **argv)
 {
+    if (argc == 5 && !strcmp(argv[1], "--stress-frames")) {
+        gchar *audio = NULL;
+        gsize size;
+        SIZE_T before = 0;
+        DWORD initial_handles = 0, final_handles;
+        FHANDLE file = CreateFileA(argv[4], GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        CHECK(file != INVALID_HANDLE_VALUE);
+        CHECK(g_file_get_contents(argv[3], &audio, &size, NULL));
+        for (int i = 0; i < 103; i++) {
+            FramedAudio *output = NULL;
+            CHECK(framed_audio_init(&output, file,
+                  !strcmp(argv[2], "aac") ? CONTENT_TYPE_AAC : CONTENT_TYPE_MP3, -1) == SR_SUCCESS);
+            CHECK(framed_audio_write(output, audio, size) == SR_SUCCESS);
+            CHECK(framed_audio_finish(&output) == SR_SUCCESS);
+            CHECK(output == NULL);
+            if (i == 2) {
+                before = private_bytes();
+                GetProcessHandleCount(GetCurrentProcess(), &initial_handles);
+            }
+        }
+        GetProcessHandleCount(GetCurrentProcess(), &final_handles);
+        SIZE_T after = private_bytes();
+        printf("Framing %s: 100 lifecycles, handle growth: %ld, private-byte growth: %lld\n",
+               argv[2], (long)final_handles - (long)initial_handles,
+               (long long)after - (long long)before);
+        CHECK(final_handles <= initial_handles + 1);
+        CHECK(after <= before + 4 * 1024 * 1024);
+        CloseHandle(file); g_free(audio);
+        return 0;
+    }
+    if (argc == 6 && !strcmp(argv[1], "--frame-copy")) {
+        FILE *input = fopen(argv[3], "rb");
+        FHANDLE file = CreateFileA(argv[4], GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        FramedAudio *output = NULL;
+        size_t count, block = atoi(argv[5]);
+        char *buffer = g_malloc(block);
+        CHECK(input && file != INVALID_HANDLE_VALUE && block);
+        CHECK(framed_audio_init(&output, file,
+              !strcmp(argv[2], "aac") ? CONTENT_TYPE_AAC : CONTENT_TYPE_MP3, -1) == SR_SUCCESS);
+        while ((count = fread(buffer, 1, block, input)))
+            CHECK(framed_audio_write(output, buffer, count) == SR_SUCCESS);
+        CHECK(framed_audio_finish(&output) == SR_SUCCESS);
+        CHECK(output == NULL);
+        CHECK(framed_audio_finish(&output) == SR_SUCCESS);
+        CloseHandle(file); fclose(input); g_free(buffer);
+        return 0;
+    }
     /* Identical parsed titles still need a boundary when selection changes. */
     TRACK_INFO excluded = {0}, accepted = {0};
     accepted.save_track = TRUE;

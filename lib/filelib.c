@@ -22,6 +22,7 @@
 #include <errno.h>
 #include "sr_compat.h"
 #include "filelib.h"
+#include "framed_audio.h"
 #include "ripstream_wav.h"
 #include "mchar.h"
 #include "debug.h"
@@ -330,6 +331,7 @@ filelib_write_track (Writer *writer, char *buf, u_long size)
 {
     debug_printf ("filelib_write_track %p %u\n", buf, size);
     if (writer->m_wav) return wav_output_write(writer->m_wav, buf, size);
+    if (writer->m_audio) return framed_audio_write(writer->m_audio, buf, size);
     return filelib_write (writer->m_file, buf, size);
 }
 
@@ -442,9 +444,10 @@ filelib_close (
 	return SR_SUCCESS;
     }
     {
-        error_code rc = wav_output_finish(&writer->m_wav);
+        error_code rc = framed_audio_finish(&writer->m_audio);
+        error_code wav_rc = wav_output_finish(&writer->m_wav);
         close_file (&writer->m_file);
-        return rc;
+        return rc != SR_SUCCESS ? rc : wav_rc;
     }
 }
 
@@ -455,7 +458,8 @@ filelib_shutdown (RIP_MANAGER_INFO* rmi)
     if (rmi->cbuf3.write_list) {
         for (node = rmi->cbuf3.write_list->head; node; node = node->next) {
             Writer *writer = node->data;
-            if (writer->m_started) filelib_close(rmi, writer);
+            if (writer->m_started && filelib_close(rmi, writer) != SR_SUCCESS)
+                fprintf(stderr, "Unable to finalize incomplete audio output.\n");
         }
     }
     close_files (rmi);

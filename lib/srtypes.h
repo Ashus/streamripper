@@ -373,6 +373,7 @@ struct writer
     Cbuf3_pointer    m_last_byte;
     FHANDLE          m_file;
     struct wav_output *m_wav;
+    struct framed_audio *m_audio;
     TRACK_INFO       m_ti;
 };
 

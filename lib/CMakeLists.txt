@@ -15,6 +15,7 @@ SET (STREAMRIPPER_LIB_SRC
 	errors.c errors.h
 	external.c external.h
 	filelib.c filelib.h
+	framed_audio.c framed_audio.h
 	findsep.c findsep.h
 	findsep2.c
 	http.c http.h
