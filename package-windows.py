@@ -17,7 +17,7 @@ if sys.argv[1:2] == ['--checksum']:
         encoding='utf-8', newline='\n')
     print('Release archive:', archive_path)
     sys.exit(0)
-prefix = (Path(sys.argv[1]) if len(sys.argv) > 1 else Path('C:/Download/streamripper-toolchain/mingw64')).resolve()
+prefix = (Path(sys.argv[1]) if len(sys.argv) > 1 else repo / 'build' / 'toolchain' / 'mingw64').resolve()
 dest = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else repo / 'dist'
 if dest == repo or dest == prefix or dest in repo.parents or dest in prefix.parents:
     raise ValueError('The package directory must not be a source or toolchain root.')

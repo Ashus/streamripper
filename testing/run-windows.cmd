@@ -1,7 +1,8 @@
 @echo off
 setlocal
 set "SR_TOOLCHAIN=%~1"
-if not defined SR_TOOLCHAIN set "SR_TOOLCHAIN=C:\Download\streamripper-toolchain\mingw64"
+if not defined SR_TOOLCHAIN set "SR_TOOLCHAIN=%~dp0..\build\toolchain\mingw64"
+for %%I in ("%SR_TOOLCHAIN%") do set "SR_TOOLCHAIN=%%~fI"
 set "PATH=%SR_TOOLCHAIN%\bin;%PATH%"
 pushd "%~dp0.."
 ctest --test-dir build --output-on-failure

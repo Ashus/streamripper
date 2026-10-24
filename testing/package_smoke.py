@@ -9,7 +9,7 @@ import sys
 import tempfile
 
 repo = Path(__file__).resolve().parents[1]
-prefix = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('C:/Download/streamripper-toolchain/mingw64')
+prefix = (Path(sys.argv[1]) if len(sys.argv) > 1 else repo / 'build' / 'toolchain' / 'mingw64').resolve()
 env = os.environ.copy()
 env['PATH'] = str(prefix / 'bin') + os.pathsep + env.get('PATH', '')
 
