@@ -82,8 +82,12 @@ int main(int argc, char **argv)
         CHECK(http_construct_sc_request("http://[fe80::1%2512]:8080/", NULL, request, "test") == SR_SUCCESS);
         CHECK(strstr(request, "\r\nHost: [fe80::1]:8080\r\n"));
         CHECK(http_construct_page_request("http://[::1]:8080/page", TRUE, request) == SR_SUCCESS);
-        CHECK(strstr(request, "GET http://[::1]:8080/page HTTP/1.0\r\n"));
+        CHECK(strstr(request, "GET http://[::1]:8080/page HTTP/1.1\r\n"));
         CHECK(strstr(request, "\r\nHost: [::1]:8080\r\n"));
+        CHECK(strstr(request, "Chrome/152.0.0.0 Safari/537.36\r\n"));
+        CHECK(strstr(request, "\r\nAccept-Encoding: identity\r\n"));
+        CHECK(strstr(request, "\r\nConnection: close\r\n"));
+        CHECK(!strstr(request, "MSIE") && !strstr(request, "gzip") && !strstr(request, "Keep-Alive"));
         puts("PASS: IPv6 request authorities, proxy forms, default ports and scope removal");
         return 0;
     }

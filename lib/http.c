@@ -401,7 +401,7 @@ make_auth_header (const char *header_name, const char *username,
     return authbuf;
 }
 
-// Here we pretend we're IE 5, hehe
+/* Browser identification for the legacy page-request helper. */
 error_code
 http_construct_page_request (const char *url, BOOL proxyformat, char *buffer)
 {
@@ -417,13 +417,13 @@ http_construct_page_request (const char *url, BOOL proxyformat, char *buffer)
         return SR_ERROR_INVALID_URL;
 
     ret = snprintf(buffer, MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH,
-                "GET %s HTTP/1.0\r\n"
+                "GET %s HTTP/1.1\r\n"
                 "Host: %s\r\n"
                 "Accept: */*\r\n"
                 "Accept-Language: en-us\r\n"
-                "Accept-Encoding: gzip, deflate\r\n"
-                "User-Agent: Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)\r\n"
-                "Connection: Keep-Alive\r\n\r\n",
+                "Accept-Encoding: identity\r\n"
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36\r\n"
+                "Connection: close\r\n\r\n",
                 myurl, authority);
     return ret < 0 || ret >= MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH
         ? SR_ERROR_INVALID_URL : SR_SUCCESS;
