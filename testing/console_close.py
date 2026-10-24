@@ -92,6 +92,7 @@ try:
                 files = [p for p in incomplete.glob("*." + kind) if p != old]
                 assert old.read_bytes() == b"Existing user file"
                 assert (incomplete / "metadata.log").is_file()
+                assert not (incomplete / ".lock").exists()
                 if minimum == "0":
                     assert len(files) == 1, files
                     assert files[0].read_bytes().startswith(b"ID3")

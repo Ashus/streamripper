@@ -8,18 +8,34 @@
 #include <string.h>
 #ifndef WIN32
 #include <sys/file.h>
+#include <sys/stat.h>
 #endif
 
 typedef struct {
     char *path;
     FHANDLE file;
+    gboolean owned;
 } RecordingLock;
 
 static void close_lock(RecordingLock *lock)
 {
 #ifdef WIN32
+    if (lock->owned) {
+        FILE_DISPOSITION_INFO disposition = {TRUE};
+        HANDLE removal = ReOpenFile(lock->file, DELETE,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0);
+        if (removal == INVALID_HANDLE_VALUE ||
+            !SetFileInformationByHandle(removal, FileDispositionInfo,
+                                        &disposition, sizeof(disposition)))
+            sr_console_printf(stderr, "Unable to remove recording lock: %s\n", lock->path);
+        if (removal != INVALID_HANDLE_VALUE) CloseHandle(removal);
+    }
     CloseHandle(lock->file);
 #else
+    /* Unlink while locked; an opener of the old inode must revalidate after flock. */
+    if (lock->owned && g_unlink(lock->path) != 0 && errno != ENOENT)
+        sr_console_printf(stderr, "Unable to remove recording lock: %s (%s)\n",
+                          lock->path, g_strerror(errno));
     close(lock->file);
 #endif
     g_free(lock->path);
@@ -56,7 +72,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
 #ifdef WIN32
     gunichar2 *wide = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
     lock->file = wide ? CreateFileW((LPCWSTR)wide, GENERIC_READ | GENERIC_WRITE,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL, NULL) : INVALID_HANDLE_VALUE;
     g_free(wide);
 #else
@@ -106,6 +122,26 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
         close_lock(lock);
         return FALSE;
     }
+#ifdef WIN32
+    FILE_STANDARD_INFO info;
+    if (!GetFileInformationByHandleEx(lock->file, FileStandardInfo, &info, sizeof(info))) {
+        sr_console_printf(stderr, "Unable to inspect recording lock: %s\n", path);
+        close_lock(lock);
+        return FALSE;
+    }
+    if (info.DeletePending) {
+        close_lock(lock);
+        return recording_lock_acquire(locks, incomplete_directory);
+    }
+#else
+    struct stat opened, named;
+    if (fstat(lock->file, &opened) || g_stat(path, &named) ||
+        opened.st_dev != named.st_dev || opened.st_ino != named.st_ino) {
+        close_lock(lock);
+        return recording_lock_acquire(locks, incomplete_directory);
+    }
+#endif
+    lock->owned = TRUE;
 #ifdef WIN32
     g_snprintf(pid, sizeof(pid), "%lu\n", (unsigned long)GetCurrentProcessId());
     acquired = WriteFile(lock->file, pid, (DWORD)strlen(pid), &count, NULL) && count == strlen(pid);

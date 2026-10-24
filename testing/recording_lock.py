@@ -98,6 +98,7 @@ try:
         other = start(root / "independent", seconds=2)
         other.communicate(timeout=6)
         assert other.returncode == 0
+        assert not (root / "independent/incomplete/.lock").exists()
         owner.kill()
         owner.communicate(timeout=6)
         assert lock.exists()  # A stale PID alone must not block recovery.
@@ -105,9 +106,11 @@ try:
         await_lock(dest, recovered)
         recovered.communicate(timeout=6)
         assert recovered.returncode == 0
+        assert not lock.exists()
         restarted = start(dest, seconds=2)
         restarted.communicate(timeout=6)
         assert restarted.returncode == 0
+        assert not lock.exists()
         print("PASS: Unicode/alias paths, PID diagnostics, reconnect ownership, independent directories, crash and normal restart")
 
         race = root / "race"
