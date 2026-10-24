@@ -1,2 +1,3 @@
+# Binary release artifacts are generated locally and uploaded as release assets.
 *.exe -text
 *.dll -text
