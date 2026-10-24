@@ -153,7 +153,7 @@ set_socket_blocking(SOCKET sock, int blocking)
 
 error_code
 socklib_open (HSOCKET *socket_handle, char *host, int port,
-              char *if_name, int timeout)
+              char *if_name, int timeout, int ip_version)
 {
     struct addrinfo hints = {0}, *addresses = NULL, *address;
     char service[6];
@@ -162,7 +162,8 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
     gint64 deadline, next_attempt = 0;
     error_code result = SR_ERROR_CONNECT_FAILED;
 
-    if (!socket_handle || !host || port < 1 || port > 65535)
+    if (!socket_handle || !host || port < 1 || port > 65535 ||
+        (ip_version != 0 && ip_version != 4 && ip_version != 6))
         return SR_ERROR_INVALID_PARAM;
     socket_handle->closed = TRUE;
     socket_handle->s = SOCKET_ERROR;
@@ -173,7 +174,7 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
 #ifdef HAVE_OPENSSL
     socket_handle->tls = NULL;
 #endif
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = ip_version == 4 ? AF_INET : ip_version == 6 ? AF_INET6 : AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     snprintf(service, sizeof(service), "%d", port);

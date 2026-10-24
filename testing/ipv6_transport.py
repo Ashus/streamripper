@@ -13,7 +13,9 @@ import time
 
 repo = Path(__file__).resolve().parents[1]
 exe = repo / 'dist' / 'streamripper.exe'
-prefix = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else repo / 'build' / 'toolchain' / 'mingw64'
+family_only = '--families-only' in sys.argv[1:]
+arguments = [value for value in sys.argv[1:] if value != '--families-only']
+prefix = Path(arguments[0]).resolve() if arguments else repo / 'build' / 'toolchain' / 'mingw64'
 openssl = prefix / 'bin' / 'openssl.exe'
 sample = (repo / 'build' / 'sample-5s.mp3').read_bytes()
 audio = (sample * (16000 // len(sample) + 1))[:16000]
@@ -46,6 +48,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == '/ipv6':
             self.send_response(302)
             self.send_header('Location', f'http://[::1]:{plain6.server_port}/stream')
+            self.end_headers()
+            return
+        if self.path == '/ipv4':
+            self.send_response(302)
+            self.send_header('Location', f'http://127.0.0.1:{plain4.server_port}/stream')
             self.end_headers()
             return
         self.send_response(200)
@@ -100,13 +107,14 @@ try:
         environment.pop('SSL_CERT_FILE', None)
         environment.pop('SSL_CERT_DIR', None)
         environment['PATH'] = str(openssl.parent) + os.pathsep + environment.get('PATH', '')
-        subprocess.run([str(repo / 'build' / 'core_regression.exe'), '--ipv6-requests'],
-                       check=True, env=environment)
-        subprocess.run([str(repo / 'build' / 'core_regression.exe'), '--ipv6-connect-cycles',
-                        str(plain4.server_port), str(plain6.server_port)],
-                       check=True, env=environment, timeout=30)
+        if not family_only:
+            subprocess.run([str(repo / 'build' / 'core_regression.exe'), '--ipv6-requests'],
+                           check=True, env=environment)
+            subprocess.run([str(repo / 'build' / 'core_regression.exe'), '--ipv6-connect-cycles',
+                            str(plain4.server_port), str(plain6.server_port)],
+                           check=True, env=environment, timeout=30)
 
-        def record(name, url, extra=(), expected=True):
+        def record(name, url, extra=(), expected=True, failure=b'TLS error'):
             dest = root / name
             result = subprocess.run([str(exe), url, '-c', '-l', '2', '-k', '0', '-s',
                     '-d', str(dest), '--xs-none', '-m', '2'] + list(extra),
@@ -117,8 +125,59 @@ try:
                 assert result.returncode == 0 and b'IPv6 Artist - IPv6 Track' in output, (name, output[-2000:])
                 assert any(f.stem == 'IPv6 Artist - IPv6 Track' and f.stat().st_size > 16000 for f in files), (name, files)
             else:
-                assert b'TLS error' in output and not files, (name, output)
+                assert failure in output and not files, (name, output)
             print('PASS:', name, flush=True)
+
+        help_text = subprocess.check_output([str(exe), '--help'], env=environment)
+        assert b'-4, --ipv4' in help_text and b'-6, --ipv6' in help_text
+        for options in (['-4', '-6'], ['-6', '-4'], ['--ipv4', '--ipv6'], ['-4', '--ipv6']):
+            result = subprocess.run([str(exe), 'http://localhost/'] + options + ['--help'],
+                                    capture_output=True, timeout=3, env=environment)
+            assert result.returncode != 0 and b'mutually exclusive' in result.stderr, options
+        for option in ('--ipv4=yes', '--ipv6='):
+            result = subprocess.run([str(exe), 'http://localhost/', option, '--help'],
+                                    capture_output=True, timeout=3, env=environment)
+            assert result.returncode != 0 and b'does not take an argument' in result.stderr, option
+        for options in (['-4', '--ipv4'], ['--ipv6', '-6']):
+            result = subprocess.run([str(exe), 'http://localhost/'] + options + ['--help'],
+                                    capture_output=True, timeout=3, env=environment)
+            assert result.returncode == 0 and result.stdout == help_text, options
+        print('PASS: IP family aliases, conflicts, repetitions, and flag arity', flush=True)
+
+        resolve_error = b'SR_ERROR_CANT_RESOLVE_HOSTNAME'
+        for flag in ('-4', '--ipv4'):
+            record('force4-' + flag.lstrip('-'), f'http://localhost:{plain4.server_port}/stream', [flag])
+        for flag in ('-6', '--ipv6'):
+            record('force6-' + flag.lstrip('-'), f'http://localhost:{plain6.server_port}/stream', [flag])
+        record('force4-no-ipv6-fallback', f'http://[::1]:{plain6.server_port}/stream',
+               ['-4'], expected=False, failure=resolve_error)
+        record('force6-no-ipv4-fallback', f'http://127.0.0.1:{plain4.server_port}/stream',
+               ['-6'], expected=False, failure=resolve_error)
+        record('force4-redirect-ok', f'http://localhost:{plain4.server_port}/ipv4', ['-4'])
+        record('force6-redirect-ok', f'http://localhost:{plain6.server_port}/ipv6', ['-6'])
+        record('force4-redirect-blocked', f'http://localhost:{plain4.server_port}/ipv6',
+               ['-4'], expected=False, failure=resolve_error)
+        record('force6-redirect-blocked', f'http://localhost:{plain6.server_port}/ipv4',
+               ['-6'], expected=False, failure=resolve_error)
+        record('force4-proxy-ipv6-origin', 'http://[::1]:12345/proxy',
+               ['-4', '--proxy', f'http://localhost:{plain4.server_port}'])
+        record('force6-proxy-ipv4-origin', 'http://127.0.0.1:12345/proxy',
+               ['-6', '--proxy', f'http://localhost:{plain6.server_port}'])
+        record('force4-ipv6-proxy-blocked', 'http://example.com/stream',
+               ['-4', '--proxy', f'http://[::1]:{plain6.server_port}'],
+               expected=False, failure=resolve_error)
+        record('force6-ipv4-proxy-blocked', 'http://example.com/stream',
+               ['-6', '--proxy', f'http://127.0.0.1:{plain4.server_port}'],
+               expected=False, failure=resolve_error)
+        tls4 = serve(socket.AF_INET, context)
+        record('force4-tls', f'https://localhost:{tls4.server_port}/stream',
+               ['-4', '--tls-ca-file=' + str(cert)])
+        record('force6-tls', f'https://localhost:{tls6.server_port}/stream',
+               ['-6', '--tls-ca-file=' + str(cert)])
+        if family_only:
+            record('auto-ipv4-preserved', f'http://localhost:{plain4.server_port}/stream')
+            record('auto-ipv6-preserved', f'http://localhost:{plain6.server_port}/stream')
+            raise SystemExit(0)
 
         record('ipv6-literal', f'http://[::1]:{plain6.server_port}/stream?name=a%26b')
         assert ('/stream?name=a%26b', f'[::1]:{plain6.server_port}') in requests

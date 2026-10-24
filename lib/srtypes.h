@@ -479,6 +479,7 @@ struct stream_prefs
     guint64 incomplete_min_duration_ms;
     BOOL tls_insecure;
     BOOL http10;
+    int ip_version;                 /* 0: automatic, 4: IPv4, 6: IPv6; invocation only */
     BOOL wav;
     BOOL tls_info;
     char tls_ca_file[SR_MAX_PATH];

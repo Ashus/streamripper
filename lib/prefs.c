@@ -436,6 +436,7 @@ prefs_get_stream_defaults (STREAM_PREFS* prefs)
     prefs->incomplete_min_duration_ms = 0;
     prefs->tls_insecure = FALSE;
     prefs->http10 = FALSE;
+    prefs->ip_version = 0;
     prefs->wav = FALSE;
     prefs->tls_info = FALSE;
     prefs->tls_ca_file[0] = 0;

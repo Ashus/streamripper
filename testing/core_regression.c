@@ -97,7 +97,7 @@ int main(int argc, char **argv)
         CHECK(socklib_init() == SR_SUCCESS);
         for (int iteration = 0; iteration < 21; iteration++) {
             for (int port = 2; port <= 3; port++) {
-                CHECK(socklib_open(&rmi.stream_sock, "localhost", atoi(argv[port]), NULL, 2) == SR_SUCCESS);
+                CHECK(socklib_open(&rmi.stream_sock, "localhost", atoi(argv[port]), NULL, 2, 0) == SR_SUCCESS);
                 socklib_close(&rmi.stream_sock);
             }
             if (!iteration) CHECK(GetProcessHandleCount(GetCurrentProcess(), &before));

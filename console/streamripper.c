@@ -296,6 +296,9 @@ print_usage (FILE* stream)
     print_usage_option(stream, "-h, --help", "Print this help and exit");
     print_usage_option(stream, "-v, --version", "Print the version and exit");
     fputs("\nConnection:\n", stream);
+    print_usage_option(stream, "-4, --ipv4", "Use IPv4 for outgoing connections");
+    print_usage_option(stream, "-6, --ipv6", "Use IPv6 for outgoing connections");
+    print_usage_option(stream, "", "Default: automatic; -4/-6 conflict");
     print_usage_option(stream, "-c, --no-reconnect", "Disable automatic reconnection");
     print_usage_option(stream, "-m, --timeout SECONDS", "Set the stall timeout in SECONDS");
     print_usage_option(stream, "", "Default: 15 seconds");
@@ -378,6 +381,8 @@ normalize_option(char *input, char **argument)
         {"help", "-h"},
         {"version", "-v"},
         {"no-reconnect", "-c"},
+        {"ipv4", "-4"},
+        {"ipv6", "-6"},
         {"timeout", "-m"},
         {"user-agent", "-u"},
         {"proxy", "-p"},
@@ -517,6 +522,14 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
         }
 	switch (option[1])
 	{
+        case '4':
+        case '6':
+            if (prefs->ip_version && prefs->ip_version != option[1] - '0') {
+                fprintf(stderr, "Options -4/--ipv4 and -6/--ipv6 are mutually exclusive.\n");
+                exit(EXIT_FAILURE);
+            }
+            prefs->ip_version = option[1] - '0';
+            break;
 	case 'a':
 	    /* Create single file output + cue sheet */
 	    OPT_FLAG_SET (prefs->flags, OPT_SINGLE_FILE_OUTPUT, 1);

@@ -9,7 +9,7 @@
 #endif
 
 error_code socklib_init ();
-error_code socklib_open (HSOCKET *socket_handle, char *host, int port, char *if_name, int timeout);
+error_code socklib_open (HSOCKET *socket_handle, char *host, int port, char *if_name, int timeout, int ip_version);
 void socklib_close (HSOCKET *socket_handle);
 #ifdef HAVE_OPENSSL
 error_code socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS *prefs);

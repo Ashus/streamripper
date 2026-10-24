@@ -86,7 +86,7 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	debug_printf ("http_sc_connect(): calling socklib_open"
 		      " host=%s, port=%d\n", url_info.host, url_info.port);
 	ret = socklib_open (sock, url_info.host, url_info.port, if_name, 
-			    rmi->prefs->timeout);
+			    rmi->prefs->timeout, rmi->prefs->ip_version);
 	if (ret != SR_SUCCESS) {
 	    return ret;
 	}
