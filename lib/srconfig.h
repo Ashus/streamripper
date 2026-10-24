@@ -1,7 +1,9 @@
 #ifndef __SRCONFIG_H__
 #define __SRCONFIG_H__
 
-#if defined (WIN32)
+#if defined (SR_MODERN_WINDOWS)
+#include "sr_config.h"
+#elif defined (WIN32)
 #include "confw32.h"
 #elif defined (HAVE_CONFIG_H)
 #include "config.h"

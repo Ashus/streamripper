@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #endif
 #include "srtypes.h"
+#include "callback.h"
 #include "cbuf3.h"
 #include "findsep.h"
 #include "mchar.h"

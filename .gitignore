@@ -1,1 +1,5 @@
+/build/
+/build.log
+/gcs.txt
+__pycache__/
 /dist/

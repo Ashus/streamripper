@@ -104,7 +104,9 @@
 
 #if WIN32
 //#define EAGAIN          WSAEWOULDBLOCK
+#ifndef EWOULDBLOCK
 #define EWOULDBLOCK     WSAEWOULDBLOCK
+#endif
 #else
 #define closesocket     close
 #define SOCKET_ERROR	-1
@@ -115,7 +117,9 @@
 ////////////////////////////////////////// 
 
 #if WIN32
+#ifndef SR_MODERN_WINDOWS
 #define snprintf _snprintf
+#endif
 #endif
 
 #endif // __COMPAT_H__

@@ -1,9 +1,14 @@
 ##-----------------------------------------------------------------------------
 ##  Welcome to Streamripper
 ##-----------------------------------------------------------------------------
-PROJECT (STREAMRIPPER)
+CMAKE_MINIMUM_REQUIRED (VERSION 3.16)
+PROJECT (STREAMRIPPER C)
 
-CMAKE_MINIMUM_REQUIRED (VERSION 2.6.0)
+OPTION (SR_MODERN_WINDOWS "Build the CLI with current MinGW libraries and TLS" ${MINGW})
+IF (SR_MODERN_WINDOWS)
+  INCLUDE (cmake/ModernWindows.cmake)
+  RETURN ()
+ENDIF ()
 
 ## Tell CMake to be quiet
 CMAKE_POLICY (SET CMP0003 NEW)

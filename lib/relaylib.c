@@ -346,7 +346,7 @@ try_port (RELAYLIB_INFO* rli, u_short port, char *if_name, char *relay_ip)
     make_nonblocking(rli->m_listensock);
 
     if ('\0' == *relay_ip) {
-	if (read_interface(if_name,&local.sin_addr.s_addr) != 0)
+        if (read_interface(if_name,(uint32_t *)&local.sin_addr.s_addr) != 0)
 	    local.sin_addr.s_addr = htonl(INADDR_ANY);
     } else {
 	he = gethostbyname(relay_ip);
