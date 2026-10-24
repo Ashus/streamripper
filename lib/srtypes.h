@@ -234,6 +234,7 @@ typedef struct HSOCKETst
         guint64 chunk_remaining;
 #ifdef HAVE_OPENSSL
         void *tls;
+        void *proxy_tls;             /* Outer TLS retained beneath a CONNECT tunnel */
 #endif
 } HSOCKET;
 

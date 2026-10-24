@@ -173,6 +173,7 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
     socket_handle->chunk_remaining = 0;
 #ifdef HAVE_OPENSSL
     socket_handle->tls = NULL;
+    socket_handle->proxy_tls = NULL;
 #endif
     hints.ai_family = ip_version == 4 ? AF_INET : ip_version == 6 ? AF_INET6 : AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -322,13 +323,18 @@ socklib_free_tls (HSOCKET *socket_handle)
         SSL_free((SSL *)socket_handle->tls);
         socket_handle->tls = NULL;
     }
+    if (socket_handle->proxy_tls) {
+        SSL_free((SSL *)socket_handle->proxy_tls);
+        socket_handle->proxy_tls = NULL;
+    }
 }
 
 error_code
-socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS *prefs)
+socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS *prefs, BOOL proxy)
 {
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     SSL *ssl;
+    SSL *transport = (SSL *)socket_handle->tls;
     unsigned char ip[16];
     char verification_host[MAX_HOST_LEN];
     char *zone;
@@ -362,6 +368,18 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     ssl = SSL_new(ctx);
     SSL_CTX_free(ctx);
     if (!ssl) return SR_ERROR_CONNECT_FAILED;
+    if (transport) {
+        BIO *tunnel = BIO_new(BIO_f_ssl());
+        if (!tunnel) {
+            SSL_free(ssl);
+            return SR_ERROR_CONNECT_FAILED;
+        }
+        /* The inner SSL owns its filter BIO, while we retain the outer SSL.
+           Free the inner object first, then release proxy_tls explicitly. */
+        BIO_set_ssl(tunnel, transport, BIO_NOCLOSE);
+        SSL_set_bio(ssl, tunnel, tunnel);
+        socket_handle->proxy_tls = transport;
+    }
     socket_handle->tls = ssl;
     ERR_clear_error();
     /* Scope IDs route locally; certificate IP identities never include them. */
@@ -372,7 +390,7 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     } else {
         if (!SSL_set_tlsext_host_name(ssl, host) || !SSL_set1_host(ssl, host)) goto failed;
     }
-    if (!SSL_set_fd(ssl, (int)socket_handle->s) || SSL_connect(ssl) != 1) goto failed;
+    if ((!transport && !SSL_set_fd(ssl, (int)socket_handle->s)) || SSL_connect(ssl) != 1) goto failed;
     debug_printf("TLS connected: %s, %s\n", SSL_get_version(ssl), SSL_get_cipher(ssl));
     if (prefs->tls_info) {
         const char *signature = "unknown";
@@ -383,14 +401,14 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
         int nid;
         if (SSL_get_peer_signature_type_nid(ssl, &nid)) signature = OBJ_nid2sn(nid);
 #endif
-        fprintf(stdout, "TLS: %s; cipher: %s; group: %s; signature: %s; verification: %s\n",
-                SSL_get_version(ssl), SSL_get_cipher(ssl), group ? group : "unknown",
+        fprintf(stdout, "TLS%s: %s; cipher: %s; group: %s; signature: %s; verification: %s\n",
+                proxy ? " proxy" : "", SSL_get_version(ssl), SSL_get_cipher(ssl), group ? group : "unknown",
                 signature ? signature : "unknown", prefs->tls_insecure ? "disabled" : "enabled");
         fflush(stdout);
     }
     return SR_SUCCESS;
 failed:
-    fprintf(stderr, "TLS error for %s: %s (%s)\n", host,
+    fprintf(stderr, "TLS%s error for %s: %s (%s)\n", proxy ? " proxy" : "", host,
             ERR_peek_last_error() ? ERR_reason_error_string(ERR_peek_last_error()) : "connection closed",
             X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
     socklib_free_tls(socket_handle);
@@ -496,6 +514,7 @@ socklib_recv_raw (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 	if (timeout > 0
 #ifdef HAVE_OPENSSL
             && (!socket_handle->tls || SSL_pending((SSL *)socket_handle->tls) == 0)
+            && (!socket_handle->proxy_tls || SSL_pending((SSL *)socket_handle->proxy_tls) == 0)
 #endif
         ) {
 	    /* Wait up to 'timeout' seconds for data on socket to be 

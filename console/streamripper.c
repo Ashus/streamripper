@@ -303,7 +303,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "-m, --timeout SECONDS", "Set the stall timeout in SECONDS");
     print_usage_option(stream, "", "Default: 15 seconds");
     print_usage_option(stream, "-u, --user-agent USERAGENT", "Set the HTTP User-Agent");
-    print_usage_option(stream, "-p, --proxy URL", "Use an HTTP proxy");
+    print_usage_option(stream, "-p, --proxy URL", "Use an HTTP or HTTPS proxy");
     print_usage_option(stream, "--http10", "Request HTTP/1.0 instead of HTTP/1.1");
 #if !defined (WIN32)
     print_usage_option(stream, "-I, --interface INTERFACE", "Use the specified network interface");

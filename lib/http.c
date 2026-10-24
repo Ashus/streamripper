@@ -38,6 +38,8 @@ http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url,
 		   HSOCKET *sock, SR_HTTP_HEADER *info);
 static error_code
 http_parse_url(const char *url, URLINFO *urlinfo);
+static error_code http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
+                                    const URLINFO *target, const URLINFO *proxy, const char *useragent);
 
 /******************************************************************************
  * Private Vars
@@ -60,15 +62,15 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
     URLINFO url_info;
     URLINFO target_info;
     int ret;
+    BOOL target_tls = g_ascii_strncasecmp(url, "https://", 8) == 0;
+    BOOL proxy_tls = proxyurl && g_ascii_strncasecmp(proxyurl, "https://", 8) == 0;
 
     if (redirects > 10) return SR_ERROR_INVALID_URL;
     while (1) {
 	if ((ret = http_parse_url(url, &target_info)) != SR_SUCCESS) return ret;
-        /* HTTPS through a proxy needs CONNECT, not a plaintext absolute GET. */
-        if (proxyurl && g_ascii_strncasecmp(url, "https://", 8) == 0) {
-            fprintf(stderr, "HTTPS through an HTTP proxy is not supported yet.\n");
-            return SR_ERROR_INVALID_URL;
-        }
+#ifndef HAVE_OPENSSL
+        if (target_tls || proxy_tls) return SR_ERROR_INVALID_URL;
+#endif
 #ifdef HAVE_OPENSSL
         socklib_free_tls(sock);
 #endif
@@ -92,16 +94,24 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	}
 
 #ifdef HAVE_OPENSSL
-        if (g_ascii_strncasecmp(url, "https://", 8) == 0) {
-            ret = socklib_start_tls(sock, target_info.host, rmi->prefs);
+        if (proxy_tls) {
+            ret = socklib_start_tls(sock, url_info.host, rmi->prefs, TRUE);
             if (ret != SR_SUCCESS) return ret;
         }
-#else
-        if (g_ascii_strncasecmp(url, "https://", 8) == 0) return SR_ERROR_INVALID_URL;
+#endif
+        if (proxyurl && target_tls) {
+            ret = http_proxy_connect(rmi, sock, &target_info, &url_info, useragent);
+            if (ret != SR_SUCCESS) return ret;
+        }
+#ifdef HAVE_OPENSSL
+        if (target_tls) {
+            ret = socklib_start_tls(sock, target_info.host, rmi->prefs, FALSE);
+            if (ret != SR_SUCCESS) return ret;
+        }
 #endif
 
 	debug_printf("http_sc_connect(): calling http_construct_sc_request\n");
-	ret = http_construct_sc_request (url, proxyurl, headbuf, useragent);
+	ret = http_construct_sc_request (url, target_tls ? NULL : proxyurl, headbuf, useragent);
         if (ret == SR_SUCCESS && rmi->prefs->http10) {
             char *version = strstr(headbuf, " HTTP/1.1\r\n");
             if (version) version[8] = '0';
@@ -293,6 +303,69 @@ format_authority(char *authority, size_t size, const URLINFO *ui)
     g_strlcpy(host, ui->host, sizeof(host));
     if (ipv6 && (zone = strchr(host, '%')) != NULL) *zone = 0;
     return g_snprintf(authority, size, ipv6 ? "[%s]:%d" : "%s:%d", host, ui->port);
+}
+
+static error_code
+http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
+                   const URLINFO *target, const URLINFO *proxy, const char *useragent)
+{
+    char authority[MAX_HOST_LEN + 10], header[MAX_HEADER_LEN];
+    GString *request;
+    error_code rc;
+    int length = format_authority(authority, sizeof(authority), target);
+    gint64 deadline;
+    if (length < 0 || length >= sizeof(authority)) return SR_ERROR_INVALID_URL;
+    request = g_string_new(NULL);
+    g_string_append_printf(request, "CONNECT %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\n",
+                           authority, authority, useragent && *useragent ? useragent : "Streamripper/1.x");
+    if (proxy->username[0]) {
+        char *auth = make_auth_header("Proxy-Authorization", proxy->username, proxy->password);
+        g_string_append(request, auth);
+        g_free(auth);
+    }
+    g_string_append(request, "\r\n");
+    if (request->len >= MAX_HEADER_LEN) {
+        g_string_free(request, TRUE);
+        return SR_ERROR_INVALID_URL;
+    }
+    rc = socklib_sendall(sock, request->str, (int)request->len);
+    g_string_free(request, TRUE);
+    if (rc < 0) return rc;
+
+    deadline = g_get_monotonic_time() +
+        (gint64)(rmi->prefs->timeout > 0 ? rmi->prefs->timeout : 15) * G_USEC_PER_SEC;
+    for (int response = 0; response < 8; response++) {
+        int used = 0, status;
+        /* Consume exactly the header. A successful CONNECT has no HTTP body;
+           Content-Length/Transfer-Encoding must not consume tunnel bytes. */
+        while (used < sizeof(header) - 1) {
+            gint64 remaining = deadline - g_get_monotonic_time();
+            if (remaining <= 0) return SR_ERROR_TIMEOUT;
+            rc = socklib_recvall(rmi, sock, header + used, 1,
+                                (int)((remaining + G_USEC_PER_SEC - 1) / G_USEC_PER_SEC));
+            if (rc < 0) return rc;
+            if (!rc || !header[used]) return SR_ERROR_NO_HTTP_HEADER;
+            used++;
+            if (used >= 4 && !memcmp(header + used - 4, "\r\n\r\n", 4)) break;
+        }
+        header[used] = 0;
+        if (used == sizeof(header) - 1) return SR_ERROR_NO_HTTP_HEADER;
+        if (used < 14 || (strncmp(header, "HTTP/1.0 ", 9) && strncmp(header, "HTTP/1.1 ", 9)) ||
+            !g_ascii_isdigit(header[9]) || !g_ascii_isdigit(header[10]) || !g_ascii_isdigit(header[11]) ||
+            (header[12] != ' ' && !(header[12] == '\r' && header[13] == '\n')))
+            return SR_ERROR_NO_RESPONSE_HEADER;
+        status = (header[9] - '0') * 100 + (header[10] - '0') * 10 + header[11] - '0';
+        if (status >= 200 && status < 300) return SR_SUCCESS;
+        if (status >= 100 && status < 200 && status != 101) continue;
+        fprintf(stderr, "Proxy CONNECT failed (HTTP %d).\n", status);
+        switch (status) {
+        case 403: return SR_ERROR_HTTP_403_ERROR;
+        case 407: return SR_ERROR_HTTP_407_ERROR;
+        case 502: return SR_ERROR_HTTP_502_ERROR;
+        default: return SR_ERROR_NO_RESPONSE_HEADER;
+        }
+    }
+    return SR_ERROR_NO_RESPONSE_HEADER;
 }
 
 error_code

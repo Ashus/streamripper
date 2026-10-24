@@ -69,6 +69,36 @@ static void parser_cycle(RIP_MANAGER_INFO *rmi)
 
 int main(int argc, char **argv)
 {
+    if (argc == 5 && !strcmp(argv[1], "--proxy-connect-cycles")) {
+        RIP_MANAGER_INFO rmi = {0};
+        STREAM_PREFS prefs = {0};
+        HSOCKET connection = {0};
+        SR_HTTP_HEADER response;
+        DWORD before, after;
+        SIZE_T bytes_before = 0;
+        prefs.timeout = 2;
+        g_strlcpy(prefs.tls_ca_file, argv[4], sizeof(prefs.tls_ca_file));
+        rmi.prefs = &prefs;
+        CHECK(socklib_init() == SR_SUCCESS);
+        for (int iteration = 0; iteration < 13; iteration++) {
+            error_code rc = http_sc_connect(&rmi, &connection, argv[2], argv[3], &response,
+                                            "Proxy regression", NULL);
+            socklib_close(&connection);
+            socklib_free_tls(&connection);
+            CHECK(rc == SR_SUCCESS);
+            CHECK(connection.tls == NULL && connection.proxy_tls == NULL);
+            if (!iteration) {
+                CHECK(GetProcessHandleCount(GetCurrentProcess(), &before));
+                bytes_before = private_bytes();
+            }
+        }
+        CHECK(GetProcessHandleCount(GetCurrentProcess(), &after));
+        CHECK(after <= before + 2);
+        CHECK(private_bytes() < bytes_before + 32 * 1024 * 1024);
+        socklib_cleanup();
+        puts("PASS: repeated CONNECT/TLS cycles release sockets and both SSL layers");
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "--ipv6-requests")) {
         char request[MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH];
         CHECK(http_construct_sc_request("http://[::1]:8080/radio?q=a%26b", NULL, request, "test") == SR_SUCCESS);
