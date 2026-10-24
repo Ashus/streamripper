@@ -85,6 +85,11 @@ main (int argc, char *argv[])
     STREAM_PREFS prefs;
     RIP_MANAGER_INFO *rmi = 0;
 
+#ifdef SR_MODERN_WINDOWS
+    argv = g_win32_get_command_line();
+    argc = g_strv_length(argv);
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     sr_set_locale ();
 
     signal (SIGINT, catch_sig);
@@ -168,7 +173,7 @@ print_status (RIP_MANAGER_INFO *rmi)
     char status_str[128];
     char filesize_str[64];
     static int buffering_tick = 0;
-    BOOL static printed_fullinfo = FALSE;
+    static BOOL printed_fullinfo = FALSE;
 
     if (m_dont_print)
 	return;
@@ -304,6 +309,9 @@ print_usage (FILE* stream)
     fprintf(stream, "      --quiet        - Don't print ripping status to console\n");
     fprintf(stream, "      --stderr       - Print ripping status to stderr (old behavior)\n");
     fprintf(stream, "      --debug        - Save debugging trace\n");
+    fprintf(stream, "      --insecure     - Disable TLS certificate and hostname verification\n");
+    fprintf(stream, "      --tls-ca-file=path - Add trusted CAs from a PEM file\n");
+    fprintf(stream, "      --tls-info     - Print TLS version, cipher, group, and signature\n");
     fprintf(stream, "ID3 opts (mp3/aac/nsv):  [The default behavior is adding ID3V2.3 only]\n");
     fprintf(stream, "      -i                           - Don't add any ID3 tags to output file\n");
     fprintf(stream, "      --with-id3v1                 - Add ID3V1 tags to output file\n");
@@ -340,7 +348,7 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
     }
 
     // Get URL
-    strncpy (prefs->url, argv[1], MAX_URL_LEN);
+g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
 
     // Load prefs
     prefs_load ();
@@ -368,7 +376,7 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    if (i == (argc-1) || argv[i+1][0] == '-')
 		break;
 	    i++;
-	    strncpy (prefs->showfile_pattern, argv[i], SR_MAX_PATH);
+g_strlcpy (prefs->showfile_pattern, argv[i], SR_MAX_PATH);
 	    break;
 	case 'A':
 	    OPT_FLAG_SET (prefs->flags, OPT_INDIVIDUAL_TRACKS, 0);
@@ -378,16 +386,16 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    break;
 	case 'd':
 	    i++;
-	    strncpy(prefs->output_directory, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->output_directory, argv[i], SR_MAX_PATH);
 	    break;
 	case 'D':
 	    i++;
-	    strncpy(prefs->output_pattern, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->output_pattern, argv[i], SR_MAX_PATH);
 	    break;
 	case 'E':
 	    OPT_FLAG_SET (prefs->flags, OPT_EXTERNAL_CMD, 1);
 	    i++;
-	    strncpy(prefs->ext_cmd, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->ext_cmd, argv[i], SR_MAX_PATH);
 	    break;
 	case 'f':
 	    i++;
@@ -405,7 +413,7 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    break;
 	case 'I':
 	    i++;
-	    strncpy(prefs->if_name, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->if_name, argv[i], SR_MAX_PATH);
 	    break;
 	case 'k':
 	    i++;
@@ -418,7 +426,7 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    break;
 	case 'L':
 	    i++;
-	    strncpy(prefs->pls_file, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->pls_file, argv[i], SR_MAX_PATH);
 	    break;
 	case 'm':
 	    i++;
@@ -439,7 +447,7 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    break;
 	case 'p':
 	    i++;
-	    strncpy(prefs->proxyurl, argv[i], MAX_URL_LEN);
+g_strlcpy(prefs->proxyurl, argv[i], MAX_URL_LEN);
 	    break;
 	case 'P':
 	    i++;
@@ -464,7 +472,7 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    	prefs->relay_port = atoi(argv[i]);
 	    } else {
 	    	*c = '\0';
-		strncpy(prefs->relay_ip, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->relay_ip, argv[i], SR_MAX_PATH);
 		prefs->relay_port = atoi(++c);
  	    }
 	    break;
@@ -483,14 +491,14 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 	    break;
 	case 'u':
 	    i++;
-	    strncpy(prefs->useragent, argv[i], MAX_USERAGENT_STR);
+g_strlcpy(prefs->useragent, argv[i], MAX_USERAGENT_STR);
 	    break;
 	case 'v':
 	    printf("Streamripper %s\n", SRVERSION);
 	    exit(0);
 	case 'w':
 	    i++;
-	    strncpy(prefs->rules_file, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->rules_file, argv[i], SR_MAX_PATH);
 	    break;
 	case 'z':
 	    OPT_FLAG_SET(prefs->flags, OPT_SEARCH_PORTS, 0);
@@ -538,6 +546,23 @@ parse_extended_options (STREAM_PREFS* prefs, char* rule)
     }
 
     /* Splitpoint options */
+    if (!strcmp(rule, "insecure")) {
+        prefs->tls_insecure = TRUE;
+        return;
+    }
+    if (!strcmp(rule, "tls-info")) {
+        prefs->tls_info = TRUE;
+        return;
+    }
+    if (g_str_has_prefix(rule, "tls-ca-file=")) {
+        const char *path = rule + strlen("tls-ca-file=");
+        if (!*path || g_strlcpy(prefs->tls_ca_file, path, sizeof(prefs->tls_ca_file)) >= sizeof(prefs->tls_ca_file)) {
+            fprintf(stderr, "Invalid CA file path.\n");
+            exit(EXIT_FAILURE);
+        }
+        return;
+    }
+
     if ((!strcmp(rule,"xs-none"))
 	|| (!strcmp(rule,"xs_none"))) {
 	prefs->sp_opt.xs = 0;
@@ -603,28 +628,28 @@ parse_extended_options (STREAM_PREFS* prefs, char* rule)
     /* codeset options */
     x = strlen("codeset-filesys=");
     if (!strncmp(rule,"codeset-filesys=",x)) {
-	strncpy (prefs->cs_opt.codeset_filesys, &rule[x], MAX_CODESET_STRING);
+g_strlcpy (prefs->cs_opt.codeset_filesys, &rule[x], MAX_CODESET_STRING);
 	debug_printf ("Setting filesys codeset to %s\n",
 		      prefs->cs_opt.codeset_filesys);
 	return;
     }
     x = strlen("codeset-id3=");
     if (!strncmp(rule,"codeset-id3=",x)) {
-	strncpy (prefs->cs_opt.codeset_id3, &rule[x], MAX_CODESET_STRING);
+g_strlcpy (prefs->cs_opt.codeset_id3, &rule[x], MAX_CODESET_STRING);
 	debug_printf ("Setting id3 codeset to %s\n",
 		      prefs->cs_opt.codeset_id3);
 	return;
     }
     x = strlen("codeset-metadata=");
     if (!strncmp(rule,"codeset-metadata=",x)) {
-	strncpy (prefs->cs_opt.codeset_metadata, &rule[x], MAX_CODESET_STRING);
+g_strlcpy (prefs->cs_opt.codeset_metadata, &rule[x], MAX_CODESET_STRING);
 	debug_printf ("Setting metadata codeset to %s\n",
 		      prefs->cs_opt.codeset_metadata);
 	return;
     }
     x = strlen("codeset-relay=");
     if (!strncmp(rule,"codeset-relay=",x)) {
-	strncpy (prefs->cs_opt.codeset_relay, &rule[x], MAX_CODESET_STRING);
+g_strlcpy (prefs->cs_opt.codeset_relay, &rule[x], MAX_CODESET_STRING);
 	debug_printf ("Setting relay codeset to %s\n",
 		      prefs->cs_opt.codeset_relay);
 	return;

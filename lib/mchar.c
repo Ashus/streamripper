@@ -519,6 +519,14 @@ const char*
 default_codeset (void)
 {
     const char* fromcode = 0;
+#if defined (SR_MODERN_WINDOWS)
+    /* libintl's locale aliases can report the regional ANSI codepage even
+       when Windows uses UTF-8 for ANSI APIs. */
+    static char windows_codeset[32];
+    if (GetACP() == CP_UTF8) return "UTF-8";
+    snprintf(windows_codeset, sizeof(windows_codeset), "CP%u", GetACP());
+    return windows_codeset;
+#endif
 
 #if defined HAVE_LOCALE_CHARSET
     debug_printf ("Using locale_charset() to get system codeset.\n");
@@ -553,6 +561,8 @@ default_codeset (void)
     //     debug_printf ("No iconv.\n");
     // #endif
 
+    /* Older charset libraries return CP65001, which iconv cannot open. */
+    if (fromcode && !strcmp(fromcode, "CP65001")) return "UTF-8";
     return fromcode;
 }
 
@@ -604,6 +614,10 @@ register_codesets (RIP_MANAGER_INFO* rmi, CODESET_OPTIONS* cs_opt)
 
     strcpy (mchar_cs->codeset_locale, cs_opt->codeset_locale);
     strcpy (mchar_cs->codeset_filesys, cs_opt->codeset_filesys);
+#ifdef SR_MODERN_WINDOWS
+    strcpy(mchar_cs->codeset_locale, "UTF-8");
+    strcpy(mchar_cs->codeset_filesys, "UTF-8");
+#endif
     strcpy (mchar_cs->codeset_id3, cs_opt->codeset_id3);
     strcpy (mchar_cs->codeset_metadata, cs_opt->codeset_metadata);
     strcpy (mchar_cs->codeset_relay, cs_opt->codeset_relay);

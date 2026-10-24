@@ -228,6 +228,9 @@ typedef struct HSOCKETst
 {
 	SOCKET	s;
 	BOOL	closed;
+#ifdef HAVE_OPENSSL
+        void *tls;
+#endif
 } HSOCKET;
 
 /* 
@@ -259,7 +262,7 @@ typedef struct SR_HTTP_HEADERst
 typedef struct URLINFOst
 {
     char host[MAX_HOST_LEN];
-    char path[SR_MAX_PATH];
+    char path[MAX_URL_LEN];
     u_short port;
     char username[MAX_URI_STRING];
     char password[MAX_URI_STRING];
@@ -458,6 +461,9 @@ struct FILELIB_INFO_struct
 typedef struct stream_prefs STREAM_PREFS;
 struct stream_prefs
 {
+    BOOL tls_insecure;
+    BOOL tls_info;
+    char tls_ca_file[SR_MAX_PATH];
     char label[MAX_URL_LEN];		// logical name for this stream
     char url[MAX_URL_LEN];		// url of the stream to connect to
     char proxyurl[MAX_URL_LEN];		// url of a http proxy server, 

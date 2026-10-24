@@ -51,16 +51,27 @@ http_parse_url(const char *url, URLINFO *urlinfo);
  *****************************************************************************/
 /* Connect to a shoutcast type stream, leaves when it's about to 
    get the header info */
-error_code
-http_sc_connect (RIP_MANAGER_INFO* rmi,
+static error_code
+http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 		 HSOCKET *sock, const char *url, const char *proxyurl, 
-		 SR_HTTP_HEADER *info, char *useragent, char *if_name)
+		 SR_HTTP_HEADER *info, char *useragent, char *if_name, int redirects)
 {
     char headbuf[MAX_HEADER_LEN];
     URLINFO url_info;
+    URLINFO target_info;
     int ret;
 
+    if (redirects > 10) return SR_ERROR_INVALID_URL;
     while (1) {
+	if ((ret = http_parse_url(url, &target_info)) != SR_SUCCESS) return ret;
+        /* HTTPS through a proxy needs CONNECT, not a plaintext absolute GET. */
+        if (proxyurl && g_ascii_strncasecmp(url, "https://", 8) == 0) {
+            fprintf(stderr, "HTTPS through an HTTP proxy is not supported yet.\n");
+            return SR_ERROR_INVALID_URL;
+        }
+#ifdef HAVE_OPENSSL
+        socklib_free_tls(sock);
+#endif
 	debug_printf ("***** URL = %s *****\n", url);
 	debug_printf("http_sc_connect(): calling http_parse_url\n");
 	if (proxyurl) {
@@ -84,6 +95,15 @@ http_sc_connect (RIP_MANAGER_INFO* rmi,
 	    return ret;
 	}
 
+#ifdef HAVE_OPENSSL
+        if (g_ascii_strncasecmp(url, "https://", 8) == 0) {
+            ret = socklib_start_tls(sock, target_info.host, rmi->prefs);
+            if (ret != SR_SUCCESS) return ret;
+        }
+#else
+        if (g_ascii_strncasecmp(url, "https://", 8) == 0) return SR_ERROR_INVALID_URL;
+#endif
+
 	debug_printf("http_sc_connect(): calling http_construct_sc_request\n");
 	ret = http_construct_sc_request (url, proxyurl, headbuf, useragent);
 	if (ret != SR_SUCCESS) {
@@ -103,9 +123,23 @@ http_sc_connect (RIP_MANAGER_INFO* rmi,
 	if (*info->http_location) {
 	    /* RECURSIVE CASE */
 	    debug_printf ("Redirecting: %s\n", info->http_location);
-	    url = info->http_location;
-	    return http_sc_connect (rmi, sock, info->http_location, 
-				    proxyurl, info, useragent, if_name);
+            char redirect[MAX_URL_LEN];
+#ifdef SR_MODERN_WINDOWS
+            GError *error = NULL;
+            char *resolved = g_uri_resolve_relative(url, info->http_location, G_URI_FLAGS_ENCODED, &error);
+            if (!resolved || strlen(resolved) >= sizeof(redirect)) {
+                g_free(resolved);
+                g_clear_error(&error);
+                return SR_ERROR_INVALID_URL;
+            }
+            g_strlcpy(redirect, resolved, sizeof(redirect));
+            g_free(resolved);
+#else
+            g_strlcpy(redirect, info->http_location, sizeof(redirect));
+#endif
+            socklib_close(sock);
+	    return http_sc_connect_internal (rmi, sock, redirect,
+				    proxyurl, info, useragent, if_name, redirects + 1);
 	} else {
 	    break;
 	}
@@ -117,6 +151,13 @@ http_sc_connect (RIP_MANAGER_INFO* rmi,
 /******************************************************************************
  * Private functions
  *****************************************************************************/
+error_code
+http_sc_connect (RIP_MANAGER_INFO* rmi, HSOCKET *sock, const char *url,
+                 const char *proxyurl, SR_HTTP_HEADER *info, char *useragent, char *if_name)
+{
+    return http_sc_connect_internal(rmi, sock, url, proxyurl, info, useragent, if_name, 0);
+}
+
 /* See http://www.ietf.org/rfc/rfc3986.txt */
 static void
 unescape_pct_encoding (char* s)
@@ -145,8 +186,52 @@ unescape_pct_encoding (char* s)
 static error_code
 http_parse_url(const char *url, URLINFO *urlinfo)
 { 
+#ifdef SR_MODERN_WINDOWS
+    GError *error = NULL;
+    char *absolute = strstr(url, "://") ? g_strdup(url) : g_strconcat("http://", url, NULL);
+    GUri *uri = g_uri_parse(absolute, G_URI_FLAGS_ENCODED | G_URI_FLAGS_HAS_PASSWORD, &error);
+    const char *scheme, *host, *path, *query, *user, *password;
+    int port;
+    g_free(absolute);
+    if (!uri) {
+        g_clear_error(&error);
+        return SR_ERROR_INVALID_URL;
+    }
+    scheme = g_uri_get_scheme(uri);
+    host = g_uri_get_host(uri);
+    if (!scheme || !host || !*host ||
+        (g_ascii_strcasecmp(scheme, "http") && g_ascii_strcasecmp(scheme, "https"))) {
+        g_uri_unref(uri);
+        return SR_ERROR_INVALID_URL;
+    }
+    memset(urlinfo, 0, sizeof(*urlinfo));
+    port = g_uri_get_port(uri);
+    if (port < 0) port = g_ascii_strcasecmp(scheme, "https") == 0 ? 443 : 80;
+    if (port < 1 || port > 65535 || strlen(host) >= sizeof(urlinfo->host)) {
+        g_uri_unref(uri);
+        return SR_ERROR_INVALID_URL;
+    }
+    g_strlcpy(urlinfo->host, host, sizeof(urlinfo->host));
+    urlinfo->port = port;
+    path = g_uri_get_path(uri);
+    query = g_uri_get_query(uri);
+    if (g_snprintf(urlinfo->path, sizeof(urlinfo->path), "%s%s%s",
+                   path && *path ? path : "/", query ? "?" : "", query ? query : "") >= sizeof(urlinfo->path)) {
+        g_uri_unref(uri);
+        return SR_ERROR_INVALID_URL;
+    }
+    user = g_uri_get_user(uri);
+    password = g_uri_get_password(uri);
+    if (user) g_strlcpy(urlinfo->username, user, sizeof(urlinfo->username));
+    if (password) g_strlcpy(urlinfo->password, password, sizeof(urlinfo->password));
+    unescape_pct_encoding(urlinfo->username);
+    unescape_pct_encoding(urlinfo->password);
+    g_uri_unref(uri);
+    return SR_SUCCESS;
+#else
     int ret;
     char *s;
+    int default_port = g_ascii_strncasecmp(url, "https://", 8) == 0 ? 443 : 80;
 
 
     debug_printf ("http_parse_url: %s\n", url);
@@ -154,6 +239,8 @@ http_parse_url(const char *url, URLINFO *urlinfo)
     /* if we have a proto, just skip it. should we care about 
        the proto? like fail if it's not http? */
     s = strstr(url, "://");
+    if (s && g_ascii_strncasecmp(url, "http://", 7) != 0 &&
+        g_ascii_strncasecmp(url, "https://", 8) != 0) return SR_ERROR_INVALID_URL;
     if (s) url = s + strlen("://");
     memcpy(urlinfo->path, (void *)"/\0", 2);
 
@@ -187,12 +274,13 @@ http_parse_url(const char *url, URLINFO *urlinfo)
 	ret -= 1;
     } else {
 	debug_printf ("Branch 2 (%s)\n", url);
-	urlinfo->port = 80;
+	urlinfo->port = default_port;
 	ret = sscanf(url, "%511[^/]/%252s", urlinfo->host, urlinfo->path+1);
     }
     if (ret < 1) return SR_ERROR_INVALID_URL;
 
     return SR_SUCCESS;
+#endif
 }
 
 error_code
@@ -206,7 +294,8 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
 	return ret;
 
     if (proxyurl) {
-	sprintf(myurl, "http://%s:%d%s", ui.host, ui.port, ui.path);
+	if (g_snprintf(myurl, sizeof(myurl), "http://%s:%d%s", ui.host, ui.port, ui.path) >= sizeof(myurl))
+            return SR_ERROR_INVALID_URL;
 	if ((ret = http_parse_url(proxyurl, &proxyui)) != SR_SUCCESS)
 	    return ret;
     } else {
@@ -215,7 +304,7 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
 
 #if defined (commentout)
     /* This is the old header */
-    snprintf(buffer, MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH,
+    snprintf(buffer, MAX_HEADER_LEN,
 	     "GET %s HTTP/1.0\r\n"
 	     "Host: %s:%d\r\n"
 	     "User-Agent: %s\r\n"
@@ -227,7 +316,7 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
 #endif
 
     /* This is the header suggested Florian Stoehr */
-    snprintf(buffer, MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH,
+    ret = snprintf(buffer, MAX_HEADER_LEN,
 	     "GET %s HTTP/1.1\r\n"
 	     "Accept: */*\r\n"
 	     "Cache-Control: no-cache\r\n"
@@ -239,13 +328,17 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
 	     useragent[0] ? useragent: "Streamripper/1.x",
 	     ui.host,
 	     ui.port);
+    if (ret < 0 || ret >= MAX_HEADER_LEN) return SR_ERROR_INVALID_URL;
 
     // http authentication (not proxy, see below for that)
     if (ui.username[0] && ui.password[0]) {
 	char *authbuf = make_auth_header("Authorization", 
 					 ui.username,
 					 ui.password);
-	strcat(buffer, authbuf);
+	if (g_strlcat(buffer, authbuf, MAX_HEADER_LEN) >= MAX_HEADER_LEN) {
+            free(authbuf);
+            return SR_ERROR_INVALID_URL;
+        }
 	free(authbuf);
     }
 
@@ -264,12 +357,15 @@ http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, c
 	char *authbuf = make_auth_header("Proxy-Authorization",
 					 proxyui.username,
 					 proxyui.password);
-	strcat(buffer, authbuf);
+	if (g_strlcat(buffer, authbuf, MAX_HEADER_LEN) >= MAX_HEADER_LEN) {
+            free(authbuf);
+            return SR_ERROR_INVALID_URL;
+        }
 	free(authbuf);
     }
 
     
-    strcat(buffer, "\r\n");
+    if (g_strlcat(buffer, "\r\n", MAX_HEADER_LEN) >= MAX_HEADER_LEN) return SR_ERROR_INVALID_URL;
 
     debug_printf ("SC REQUEST:\n%s", buffer);
 
@@ -361,6 +457,21 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     if (rc != SR_SUCCESS) return rc;
 
     memset(info, 0, sizeof(SR_HTTP_HEADER));
+
+    /* The legacy stream reader does not decode HTTP chunk framing. Never
+       let those bytes be interpreted as audio or ICY metadata. */
+    {
+        char transfer[128];
+        if (extract_header_value(header, transfer, "Transfer-Encoding:", sizeof(transfer))) {
+            char *lower = g_ascii_strdown(transfer, -1);
+            int chunked = strstr(lower, "chunked") != NULL;
+            g_free(lower);
+            if (chunked) {
+                fprintf(stderr, "The stream uses unsupported HTTP chunked transfer encoding.\n");
+                return SR_ERROR_NOT_SHOUTCAST_STREAM;
+            }
+        }
+    }
 
     debug_printf("http header:\n%s\n", header);
 
@@ -913,4 +1024,3 @@ b64enc(const char *inbuf, int size)
     }
     return string;
 }
-

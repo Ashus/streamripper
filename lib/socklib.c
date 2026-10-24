@@ -21,6 +21,7 @@
 #include <time.h>
 #if WIN32
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <sys/time.h>
 #include <sys/types.h>
@@ -45,6 +46,13 @@
 #include "threadlib.h"
 #include "sr_compat.h"
 #include "debug.h"
+#ifdef HAVE_OPENSSL
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#ifdef WIN32
+#include <wincrypt.h>
+#endif
+#endif
 
 
 #if WIN32
@@ -119,6 +127,9 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
     /* On error:
        Unix returns -1 and sets errno.
        Windows??? */
+#ifdef HAVE_OPENSSL
+    socket_handle->tls = NULL;
+#endif
     socket_handle->s = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_handle->s == SOCKET_ERROR) {
 	debug_printf ("socket() failed\n");
@@ -127,7 +138,7 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
     }
 
     if (if_name) {
-	if (read_interface (if_name, &local.sin_addr.s_addr) != 0)
+	if (read_interface (if_name, (uint32_t *)&local.sin_addr.s_addr) != 0)
 	    local.sin_addr.s_addr = htonl(INADDR_ANY);
 	local.sin_family = AF_INET;
 	local.sin_port = htons(0);
@@ -174,9 +185,10 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
 
 #ifdef WIN32
     {
-	struct timeval tv = {timeout, 0};
+	DWORD tv = (timeout > 0 ? timeout : 15) * 1000;
+        setsockopt(socket_handle->s, SOL_SOCKET, SO_SNDTIMEO, (char *)&tv, sizeof(tv));
 	rc = setsockopt (socket_handle->s, SOL_SOCKET,  SO_RCVTIMEO, 
-			 (char *)&tv, sizeof(struct timeval));
+			 (char *)&tv, sizeof(tv));
 	if (rc == SOCKET_ERROR) {
 	    debug_printf ("setsockopt failed\n");
 	    /* GCS Added... */
@@ -191,6 +203,87 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
     return SR_SUCCESS;
 }
 
+#ifdef HAVE_OPENSSL
+/* TLS state is released by the reader after it stops, never by the thread
+   which closes the socket to interrupt a blocking read. */
+void
+socklib_free_tls (HSOCKET *socket_handle)
+{
+    if (socket_handle->tls) {
+        SSL_free((SSL *)socket_handle->tls);
+        socket_handle->tls = NULL;
+    }
+}
+
+error_code
+socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS *prefs)
+{
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+    SSL *ssl;
+    unsigned char ip[16];
+    if (!ctx) return SR_ERROR_CONNECT_FAILED;
+    SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+    SSL_CTX_set_verify(ctx, prefs->tls_insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
+    SSL_CTX_set_default_verify_paths(ctx);
+    if (prefs->tls_ca_file[0] && !SSL_CTX_load_verify_locations(ctx, prefs->tls_ca_file, NULL)) {
+        fprintf(stderr, "Unable to load CA file: %s\n", prefs->tls_ca_file);
+        SSL_CTX_free(ctx);
+        return SR_ERROR_CONNECT_FAILED;
+    }
+    if (prefs->tls_insecure) fprintf(stderr, "Warning: --insecure disables certificate and hostname verification.\n");
+#ifdef WIN32
+    {
+        HCERTSTORE roots = CertOpenSystemStoreA(0, "ROOT");
+        PCCERT_CONTEXT cert = NULL;
+        if (roots) {
+            while ((cert = CertEnumCertificatesInStore(roots, cert)) != NULL) {
+                const unsigned char *der = cert->pbCertEncoded;
+                X509 *x509 = d2i_X509(NULL, &der, cert->cbCertEncoded);
+                if (x509) {
+                    X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx), x509);
+                    X509_free(x509);
+                }
+            }
+            CertCloseStore(roots, 0);
+        }
+    }
+#endif
+    ssl = SSL_new(ctx);
+    SSL_CTX_free(ctx);
+    if (!ssl) return SR_ERROR_CONNECT_FAILED;
+    socket_handle->tls = ssl;
+    ERR_clear_error();
+    if (inet_pton(AF_INET, host, ip) == 1 || inet_pton(AF_INET6, host, ip) == 1) {
+        if (!X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host)) goto failed;
+    } else {
+        if (!SSL_set_tlsext_host_name(ssl, host) || !SSL_set1_host(ssl, host)) goto failed;
+    }
+    if (!SSL_set_fd(ssl, (int)socket_handle->s) || SSL_connect(ssl) != 1) goto failed;
+    debug_printf("TLS connected: %s, %s\n", SSL_get_version(ssl), SSL_get_cipher(ssl));
+    if (prefs->tls_info) {
+        const char *signature = "unknown";
+        const char *group = SSL_group_to_name(ssl, SSL_get_negotiated_group(ssl));
+#if OPENSSL_VERSION_NUMBER >= 0x30500000L
+        SSL_get0_peer_signature_name(ssl, &signature);
+#else
+        int nid;
+        if (SSL_get_peer_signature_type_nid(ssl, &nid)) signature = OBJ_nid2sn(nid);
+#endif
+        fprintf(stdout, "TLS: %s; cipher: %s; group: %s; signature: %s; verification: %s\n",
+                SSL_get_version(ssl), SSL_get_cipher(ssl), group ? group : "unknown",
+                signature ? signature : "unknown", prefs->tls_insecure ? "disabled" : "enabled");
+        fflush(stdout);
+    }
+    return SR_SUCCESS;
+failed:
+    fprintf(stderr, "TLS error for %s: %s (%s)\n", host,
+            ERR_peek_last_error() ? ERR_reason_error_string(ERR_peek_last_error()) : "connection closed",
+            X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
+    socklib_free_tls(socket_handle);
+    return SR_ERROR_CONNECT_FAILED;
+}
+#endif
+
 void
 socklib_cleanup()
 {
@@ -200,7 +293,7 @@ socklib_cleanup()
 void
 socklib_close(HSOCKET *socket_handle)
 {
-    closesocket(socket_handle->s);
+    if (!socket_handle->closed) closesocket(socket_handle->s);
     socket_handle->closed = TRUE;
 }
 
@@ -276,7 +369,7 @@ socklib_recvall (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 		 char* buffer, int size, int timeout)
 {
     int ret = 0, read = 0;
-    int sock;
+    SOCKET sock;
     fd_set fds;
     struct timeval tv;
     
@@ -286,7 +379,11 @@ socklib_recvall (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 	if (socket_handle->closed)
 	    return SR_ERROR_SOCKET_CLOSED;
 	
-	if (timeout > 0) {
+	if (timeout > 0
+#ifdef HAVE_OPENSSL
+            && (!socket_handle->tls || SSL_pending((SSL *)socket_handle->tls) == 0)
+#endif
+        ) {
 	    /* Wait up to 'timeout' seconds for data on socket to be 
 	       ready for read */
 #if __UNIX__
@@ -309,6 +406,16 @@ socklib_recvall (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 	    debug_printf ("socklib_recvall detected write to abort pipe.\n");
 	    return SR_ERROR_ABORT_PIPE_SIGNALLED;
 	}
+#endif
+#ifdef HAVE_OPENSSL
+        if (socket_handle->tls) {
+            ret = SSL_read((SSL *)socket_handle->tls, &buffer[read], size);
+            if (ret <= 0) {
+                int error = SSL_get_error((SSL *)socket_handle->tls, ret);
+                if (error == SSL_ERROR_ZERO_RETURN) break;
+                return SR_ERROR_RECV_FAILED;
+            }
+        } else
 #endif
         ret = recv(socket_handle->s, &buffer[read], size, 0);
 	debug_printf ("RECV req %5d bytes, got %5d bytes\n", size, ret);
@@ -342,8 +449,13 @@ socklib_sendall (HSOCKET *socket_handle, char* buffer, int size)
 	if (socket_handle->closed)
 	    return SR_ERROR_SOCKET_CLOSED;
 
+#ifdef HAVE_OPENSSL
+        if (socket_handle->tls)
+            ret = SSL_write((SSL *)socket_handle->tls, &buffer[sent], size);
+        else
+#endif
         ret = send(socket_handle->s, &buffer[sent], size, 0);
-        if (ret == SOCKET_ERROR)
+        if (ret <= 0)
 	    return SR_ERROR_SEND_FAILED;
 
 	if (ret == 0)

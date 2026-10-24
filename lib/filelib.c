@@ -31,6 +31,38 @@
 #include "rip_manager.h"
 #include "uce_dirent.h"
 
+#ifdef SR_MODERN_WINDOWS
+/* Keep paths in UTF-8 and use Unicode Win32 calls, independently of ACP. */
+#undef CODESET_FILESYS
+#define CODESET_FILESYS CODESET_UTF8
+static HANDLE create_file_utf8(const char *path, DWORD access, DWORD share,
+                              LPSECURITY_ATTRIBUTES security, DWORD creation,
+                              DWORD attributes, HANDLE template_file)
+{
+    gunichar2 *wide = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
+    HANDLE file = wide ? CreateFileW((LPCWSTR)wide, access, share, security,
+                                     creation, attributes, template_file) : INVALID_HANDLE_VALUE;
+    g_free(wide);
+    return file;
+}
+static BOOL move_file_utf8(const char *old_path, const char *new_path)
+{
+    gunichar2 *old_wide = g_utf8_to_utf16(old_path, -1, NULL, NULL, NULL);
+    gunichar2 *new_wide = g_utf8_to_utf16(new_path, -1, NULL, NULL, NULL);
+    BOOL result = old_wide && new_wide && MoveFileW((LPCWSTR)old_wide, (LPCWSTR)new_wide);
+    g_free(old_wide);
+    g_free(new_wide);
+    return result;
+}
+#undef CreateFile
+#define CreateFile create_file_utf8
+#undef MoveFile
+#define MoveFile move_file_utf8
+#undef DeleteFile
+#define DeleteFile(path) (g_unlink(path) == 0)
+#define _mkdir(path) g_mkdir(path, 0777)
+#endif
+
 #define TEMP_STR_LEN	(SR_MAX_PATH*2)
 
 /*****************************************************************************
@@ -434,7 +466,9 @@ mkdir_if_needed (RIP_MANAGER_INFO* rmi, gchar *str)
     char s[SR_MAX_PATH];
     string_from_gstring (rmi, s, SR_MAX_PATH, str, CODESET_FILESYS);
     debug_printf ("mkdir = %s -> %s\n", str, s);
-#if WIN32
+#if defined(SR_MODERN_WINDOWS)
+    g_mkdir(s, 0777);
+#elif WIN32
     mkdir (s);
 #else
     mkdir (s, 0777);
@@ -743,6 +777,12 @@ device_split (gchar* dirname,
 static error_code 
 sr_getcwd (RIP_MANAGER_INFO* rmi, gchar* dirbuf)
 {
+#ifdef SR_MODERN_WINDOWS
+    gchar *cwd = g_get_current_dir();
+    size_t length = g_strlcpy(dirbuf, cwd, SR_MAX_PATH);
+    g_free(cwd);
+    return length < SR_MAX_PATH ? SR_SUCCESS : SR_ERROR_DIR_PATH_TOO_LONG;
+#else
     char db[SR_MAX_PATH];
 #if defined (WIN32)
     if (!_getcwd (db, SR_MAX_PATH)) {
@@ -757,6 +797,7 @@ sr_getcwd (RIP_MANAGER_INFO* rmi, gchar* dirbuf)
 #endif
     gstring_from_string (rmi, dirbuf, SR_MAX_PATH, db, CODESET_FILESYS);
     return SR_SUCCESS;
+#endif
 }
 
 static void
@@ -966,7 +1007,7 @@ get_file_size (RIP_MANAGER_INFO* rmi, gchar *filename)
     char fn[SR_MAX_PATH];
 
     string_from_gstring (rmi, fn, SR_MAX_PATH, filename, CODESET_FILESYS);
-    fp = fopen (fn, "r");
+    fp = g_fopen (fn, "rb");
     if (!fp) return 0;
 
     if (fseek (fp, 0, SEEK_END)) {
@@ -1358,6 +1399,25 @@ trim_mp3_suffix (RIP_MANAGER_INFO* rmi, gchar *filename)
 static int
 get_next_sequence_number (RIP_MANAGER_INFO* rmi, gchar* fn_base)
 {
+#ifdef SR_MODERN_WINDOWS
+    gchar *directory = g_path_get_dirname(fn_base);
+    gchar *prefix = g_path_get_basename(fn_base);
+    GDir *dir = g_dir_open(directory, 0, NULL);
+    const gchar *name;
+    int sequence = 0;
+    if (dir) {
+        while ((name = g_dir_read_name(dir)) != NULL) {
+            if (g_str_has_prefix(name, prefix) && g_ascii_isdigit(name[strlen(prefix)])) {
+                int value = atoi(name + strlen(prefix));
+                if (sequence <= value) sequence = value + 1;
+            }
+        }
+        g_dir_close(dir);
+    }
+    g_free(directory);
+    g_free(prefix);
+    return sequence;
+#else
     int rc;
     int di = 0;
     int edi = 0;
@@ -1403,6 +1463,7 @@ get_next_sequence_number (RIP_MANAGER_INFO* rmi, gchar* fn_base)
     }
     closedir (dp);
     return seq;
+#endif
 }
 
 static gchar* 

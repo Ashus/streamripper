@@ -178,6 +178,9 @@ rip_manager_stop (RIP_MANAGER_INFO *rmi)
     // blocks until everything is ok and closed
     debug_printf ("Waiting for hthread_ripper to close...\n");
     threadlib_waitforclose(&rmi->hthread_ripper);
+#ifdef HAVE_OPENSSL
+    socklib_free_tls(&rmi->stream_sock);
+#endif
     debug_printf ("Destroying subsystems...\n");
     destroy_subsystems (rmi);
     debug_printf ("Destroying m_started_sem\n");
