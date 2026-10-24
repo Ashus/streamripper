@@ -84,6 +84,22 @@ static void prefs_set_integer (char* group, char* key, gint value);
 /******************************************************************************
  * Public functions
  *****************************************************************************/
+int
+prefs_load_file (const char *filename)
+{
+    GError *error = NULL;
+    prefs_cleanup();
+    m_key_file = g_key_file_new();
+    if (!filename) return TRUE;
+    /* Explicit configuration is read-only; preserve the supplied values as-is. */
+    if (!g_key_file_load_from_file(m_key_file, filename, G_KEY_FILE_NONE, &error)) {
+        fprintf(stderr, "Unable to load config file %s: %s\n", filename, error->message);
+        g_error_free(error);
+        return FALSE;
+    }
+    return TRUE;
+}
+
 /* Return 0 if the user doesn't have a preference file yet, 
    and non-zero if he does.  This is used by the winamp plugin 
    to override the default output directory. */

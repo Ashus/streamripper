@@ -21,6 +21,7 @@
 
 
 /* Prototypes */
+int prefs_load_file (const char *filename);
 int prefs_load (void);
 void prefs_save (void);
 void prefs_cleanup (void);

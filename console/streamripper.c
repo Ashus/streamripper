@@ -299,6 +299,7 @@ print_usage (FILE* stream)
     fputs("\nGeneral:\n", stream);
     print_usage_option(stream, "-h, --help", "Print this help and exit");
     print_usage_option(stream, "-v, --version", "Print the version and exit");
+    print_usage_option(stream, "--config FILE", "Read an explicit INI file (no auto-save)");
     fputs("\nConnection:\n", stream);
     print_usage_option(stream, "-4, --ipv4", "Use IPv4 for outgoing connections");
     print_usage_option(stream, "-6, --ipv6", "Use IPv6 for outgoing connections");
@@ -501,15 +502,37 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
     // Get URL
 g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
 
-    // Load prefs
-    prefs_load ();
+    /* Configuration is opt-in; command-line options always take precedence. */
+    const char *config_file = NULL;
+    for (i = 2; i < argc; i++) {
+        if (argv[i][0] != '-') continue;
+        argument = NULL;
+        option = normalize_option(argv[i], &argument);
+        if (!strcmp(option, "--config") || g_str_has_prefix(option, "--config=")) {
+            if (config_file) {
+                fprintf(stderr, "Option --config may only be specified once.\n");
+                exit(EXIT_FAILURE);
+            }
+            if (option[8] == '=') config_file = option + 9;
+            else if (i + 1 < argc && argv[i + 1][0] != '-') config_file = argv[++i];
+            if (!config_file || !*config_file) {
+                fprintf(stderr, "Option --config requires a file path.\n");
+                exit(EXIT_FAILURE);
+            }
+        } else if (!argument && strchr("dDEfIklLmMopRuwaqr", option[1]) &&
+                   i + 1 < argc && argv[i + 1][0] != '-') {
+            i++; /* Skip values so an option value cannot become a config path. */
+        }
+    }
+    if (!prefs_load_file(config_file)) exit(EXIT_FAILURE);
     prefs_get_stream_prefs (prefs, prefs->url);
-    prefs_save ();
 
     // Parse arguments
     for (i = 1; i < argc; i++) {
 	if (argv[i][0] != '-')
 	    continue;
+        if (!strcmp(argv[i], "--config")) { i++; continue; }
+        if (g_str_has_prefix(argv[i], "--config=")) continue;
 
         /* Keep argv ownership intact; attached values point into its strings. */
         argument = NULL;
