@@ -149,6 +149,7 @@ filelib_init (RIP_MANAGER_INFO* rmi,
     gchar tmp_showfile_pattern[SR_MAX_PATH];
 
     fli->m_show_file = INVALID_FHANDLE;
+    memset(&fli->m_show_allocation, 0, sizeof(fli->m_show_allocation));
     fli->m_cue_file = INVALID_FHANDLE;
     fli->m_count = do_count ? count_start : -1;
     fli->m_keep_incomplete = keep_incomplete;
@@ -336,6 +337,7 @@ filelib_start (RIP_MANAGER_INFO* rmi, Writer *writer, TRACK_INFO* ti)
     if (!fli->m_do_individual_tracks) return SR_SUCCESS;
 
     debug_printf ("filelib_start\n");
+    memset(&writer->m_allocation, 0, sizeof(writer->m_allocation));
 
     /* Compose and trim filename (not including directory) */
     msnprintf (fnbase1, TEMP_STR_LEN, m_S m_(" - ") m_S, 
@@ -381,7 +383,10 @@ filelib_write_track (Writer *writer, char *buf, u_long size)
     debug_printf ("filelib_write_track %p %u\n", buf, size);
     if (writer->m_wav) rc = wav_output_write(writer->m_wav, buf, size);
     else if (writer->m_audio) rc = framed_audio_write(writer->m_audio, buf, size);
-    else rc = filelib_write (writer->m_file, buf, size);
+    else {
+        audio_file_reserve(writer->m_file, &writer->m_allocation, size);
+        rc = filelib_write(writer->m_file, buf, size);
+    }
     if (rc != SR_SUCCESS) writer->m_cleanup_blocked = TRUE;
     return rc;
 }
@@ -396,6 +401,8 @@ filelib_write_show (RIP_MANAGER_INFO* rmi, char *buf, u_long size)
 	return SR_SUCCESS;
     }
     debug_printf ("Trying to write showfile\n");
+    if (!fli->m_show_wav)
+        audio_file_reserve(fli->m_show_file, &fli->m_show_allocation, size);
     rc = fli->m_show_wav ? wav_output_write(fli->m_show_wav, buf, size)
                         : filelib_write (fli->m_show_file, buf, size);
     if (rc != SR_SUCCESS) {
@@ -524,6 +531,7 @@ error_code filelib_finish_audio(Writer *writer)
         writer->m_duration_known = wav_rc == SR_SUCCESS;
         if (rc == SR_SUCCESS) rc = wav_rc;
     }
+    audio_file_release(writer->m_file, &writer->m_allocation);
     if (rc != SR_SUCCESS) writer->m_cleanup_blocked = TRUE;
     return rc;
 }
@@ -971,6 +979,7 @@ close_files (RIP_MANAGER_INFO* rmi)
     FILELIB_INFO* fli = &rmi->filelib_info;
     if (wav_output_finish(&fli->m_show_wav) != SR_SUCCESS)
         fprintf(stderr, "Unable to finalize WAV show output.\n");
+    audio_file_release(fli->m_show_file, &fli->m_show_allocation);
     /* GCS FIX: Need to close writers */
     //    close_file (&fli->m_file);
     close_file (&fli->m_show_file);

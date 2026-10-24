@@ -15,6 +15,7 @@
 
 struct wav_output {
     FHANDLE file;
+    AudioFileAllocation allocation;
     struct mad_stream stream;
     struct mad_frame frame;
     struct mad_synth synth;
@@ -37,8 +38,10 @@ static void put32(unsigned char *p, uint32_t value)
     put16(p + 2, value >> 16);
 }
 
-static error_code write_all(FHANDLE file, const unsigned char *data, size_t size)
+static error_code write_all(WavOutput *out, const unsigned char *data, size_t size)
 {
+    FHANDLE file = out->file;
+    audio_file_reserve(file, &out->allocation, size);
     while (size) {
 #ifdef WIN32
         DWORD count;
@@ -81,7 +84,7 @@ static error_code write_header(WavOutput *out)
 #else
     if (lseek(out->file, 0, SEEK_SET) < 0) return SR_ERROR_CANT_WRITE_TO_FILE;
 #endif
-    return write_all(out->file, h, sizeof(h));
+    return write_all(out, h, sizeof(h));
 }
 
 /* Round and clip libmad's fixed-point samples to signed 16-bit PCM. */
@@ -128,7 +131,7 @@ static error_code decode(WavOutput *out)
                 put16(pcm + (i * out->channels + channel) * 2, (uint16_t)sample);
             }
         }
-        if (write_all(out->file, pcm, length) != SR_SUCCESS)
+        if (write_all(out, pcm, length) != SR_SUCCESS)
             return SR_ERROR_CANT_WRITE_TO_FILE;
         out->bytes += length;
     }
@@ -185,6 +188,7 @@ error_code wav_output_finish_duration(WavOutput **output, guint64 *duration_ms)
     rc = out->error;
     if (rc == SR_SUCCESS && !out->channels) rc = SR_ERROR_DECODE_FAILURE;
     header_rc = write_header(out);
+    audio_file_release(out->file, &out->allocation);
     if (duration_ms)
         *duration_ms = out->rate && out->channels
             ? (guint64)out->bytes * 1000 / (out->rate * out->channels * 2) : 0;

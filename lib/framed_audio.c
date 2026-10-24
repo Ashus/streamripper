@@ -19,6 +19,7 @@ typedef struct {
 
 struct framed_audio {
     FHANDLE file;
+    AudioFileAllocation allocation;
     int type;
     GByteArray *pending;
     gboolean synced, variable;
@@ -47,8 +48,10 @@ static gint64 position(FHANDLE file, gint64 offset, int origin)
 #endif
 }
 
-static error_code write_all(FHANDLE file, const unsigned char *data, size_t size)
+static error_code write_all(FramedAudio *out, const unsigned char *data, size_t size)
 {
+    FHANDLE file = out->file;
+    audio_file_reserve(file, &out->allocation, size);
     while (size) {
 #ifdef WIN32
         DWORD count;
@@ -142,7 +145,7 @@ static error_code begin_mp3(FramedAudio *out, const unsigned char *p, const Audi
     if (out->index_position < 0) return SR_ERROR_CANT_WRITE_TO_FILE;
     out->rate = h->rate; out->channels = h->channels; out->bitrate = h->bitrate;
     out->bytes = out->index_size;
-    return write_all(out->file, out->index, out->index_size);
+    return write_all(out, out->index, out->index_size);
 }
 
 static error_code drain(FramedAudio *out, gboolean final)
@@ -186,7 +189,7 @@ static error_code drain(FramedAudio *out, gboolean final)
                 return SR_ERROR_CANT_WRITE_TO_FILE;
         }
         {
-            error_code rc = write_all(out->file, p, h.size);
+            error_code rc = write_all(out, p, h.size);
             if (rc != SR_SUCCESS) return rc;
         }
         out->frames++; out->bytes += h.size;
@@ -245,7 +248,7 @@ error_code framed_audio_finish_duration(FramedAudio **output, guint64 *duration_
         put32(tag + 8, (guint32)out->frames);
         put32(tag + 12, (guint32)out->bytes);
         if (position(out->file, out->index_position, SEEK_SET) < 0 ||
-            write_all(out->file, out->index, out->index_size) != SR_SUCCESS)
+            write_all(out, out->index, out->index_size) != SR_SUCCESS)
             out->error = SR_ERROR_CANT_WRITE_TO_FILE;
     }
     if (out->tlen_position >= 0 && out->frames) {
@@ -256,12 +259,13 @@ error_code framed_audio_finish_duration(FramedAudio **output, guint64 *duration_
                             "%" G_GUINT64_FORMAT, duration);
         put32(tag + 4, length + 1); /* ID3v2.3, Latin-1 digit string. */
         if (position(out->file, out->tlen_position, SEEK_SET) < 0 ||
-            write_all(out->file, tag, sizeof(tag)) != SR_SUCCESS)
+            write_all(out, tag, sizeof(tag)) != SR_SUCCESS)
             out->error = SR_ERROR_CANT_WRITE_TO_FILE;
     }
     if (end < 0 || position(out->file, end, SEEK_SET) < 0)
         out->error = SR_ERROR_CANT_WRITE_TO_FILE;
     rc = out->error;
+    audio_file_release(out->file, &out->allocation);
     g_byte_array_unref(out->pending);
     g_free(out); *output = NULL;
     return rc;

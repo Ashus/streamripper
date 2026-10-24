@@ -20,6 +20,7 @@
 #include <glib.h>
 #include "sr_config.h"
 #include "sr_compat.h"
+#include "file_preallocation.h"
 #include "list.h"
 #if WIN32
 /* Warning: Not allowed to mix windows.h & cdk.h */
@@ -373,6 +374,7 @@ struct writer
     Cbuf3_pointer    m_next_byte;
     Cbuf3_pointer    m_last_byte;
     FHANDLE          m_file;
+    AudioFileAllocation m_allocation;
     struct wav_output *m_wav;
     struct framed_audio *m_audio;
     mchar            m_incomplete_filename[SR_MAX_PATH];
@@ -448,6 +450,7 @@ typedef struct FILELIB_INFO_struct FILELIB_INFO;
 struct FILELIB_INFO_struct
 {
     FHANDLE m_show_file;
+    AudioFileAllocation m_show_allocation;
     struct wav_output *m_show_wav;
     FHANDLE m_cue_file;
     int m_count;
