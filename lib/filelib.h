@@ -99,5 +99,8 @@ filelib_rename_to_complete (
     RIP_MANAGER_INFO* rmi,
     Writer *writer);
 void filelib_shutdown (RIP_MANAGER_INFO* rmi);
+error_code filelib_finish_audio(Writer *writer);
+void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer);
+void filelib_update_ogg_duration(Writer *writer, const unsigned char *header, size_t size);
 
 #endif //FILELIB

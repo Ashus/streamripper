@@ -14,6 +14,9 @@ typedef struct {
     unsigned int size, rate, samples, bitrate, version, channels, side;
 } AudioHeader;
 
+/* Divisible by every supported MPEG/ADTS sample rate, including 44100/48000. */
+#define AUDIO_CLOCK G_GUINT64_CONSTANT(28224000)
+
 struct framed_audio {
     FHANDLE file;
     int type;
@@ -21,7 +24,7 @@ struct framed_audio {
     gboolean synced, variable;
     unsigned int rate, channels, bitrate, index_size, index_offset;
     unsigned char index[576];
-    guint64 frames, bytes, nanoseconds, input_bytes;
+    guint64 frames, bytes, duration_ticks, input_bytes;
     gint64 index_position, tlen_position;
     error_code error;
 };
@@ -187,7 +190,7 @@ static error_code drain(FramedAudio *out, gboolean final)
             if (rc != SR_SUCCESS) return rc;
         }
         out->frames++; out->bytes += h.size;
-        out->nanoseconds += (guint64)h.samples * 1000000000 / h.rate;
+        out->duration_ticks += h.samples * (AUDIO_CLOCK / h.rate);
         pos += h.size;
     }
     if (pos) g_byte_array_remove_range(out->pending, 0, (guint)pos);
@@ -219,13 +222,22 @@ error_code framed_audio_write(FramedAudio *out, const char *data, size_t size)
 
 error_code framed_audio_finish(FramedAudio **output)
 {
+    return framed_audio_finish_duration(output, NULL);
+}
+
+error_code framed_audio_finish_duration(FramedAudio **output, guint64 *duration_ms)
+{
     FramedAudio *out = *output;
     gint64 end;
     error_code rc;
+    guint64 duration;
     if (!out) return SR_SUCCESS;
     if (out->error == SR_SUCCESS) out->error = drain(out, TRUE);
     if (out->input_bytes && !out->frames && out->error == SR_SUCCESS)
         out->error = SR_ERROR_DECODE_FAILURE;
+    /* Round only once, including streams that change their ADTS sample rate. */
+    duration = out->duration_ticks / (AUDIO_CLOCK / 1000);
+    if (duration_ms) *duration_ms = duration;
     end = position(out->file, 0, SEEK_CUR);
     if (out->index_size) {
         unsigned char *tag = out->index + out->index_offset;
@@ -241,7 +253,7 @@ error_code framed_audio_finish(FramedAudio **output)
         int length;
         memcpy(tag, "TLEN", 4);
         length = g_snprintf((char *)tag + 11, sizeof(tag) - 11,
-                            "%" G_GUINT64_FORMAT, out->nanoseconds / 1000000);
+                            "%" G_GUINT64_FORMAT, duration);
         put32(tag + 4, length + 1); /* ID3v2.3, Latin-1 digit string. */
         if (position(out->file, out->tlen_position, SEEK_SET) < 0 ||
             write_all(out->file, tag, sizeof(tag)) != SR_SUCCESS)

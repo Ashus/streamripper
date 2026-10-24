@@ -301,7 +301,7 @@ ripstream_end_track (RIP_MANAGER_INFO* rmi, Writer *writer)
     char fullpath[SR_MAX_PATH];
     error_code rc;
 
-    if (rmi->write_data) {
+    if (writer->m_started) {
         rc = filelib_close (rmi, writer);
         if (rc != SR_SUCCESS) return rc;
     }
@@ -315,6 +315,8 @@ ripstream_end_track (RIP_MANAGER_INFO* rmi, Writer *writer)
 	    return rc;
 	}
     }
+
+    filelib_cleanup_incomplete(rmi, writer);
 
     /* Post status */
     callback_post_status (rmi, 0);

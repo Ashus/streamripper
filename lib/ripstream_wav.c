@@ -169,6 +169,11 @@ error_code wav_output_write(WavOutput *out, const char *data, size_t size)
 
 error_code wav_output_finish(WavOutput **output)
 {
+    return wav_output_finish_duration(output, NULL);
+}
+
+error_code wav_output_finish_duration(WavOutput **output, guint64 *duration_ms)
+{
     WavOutput *out = *output;
     error_code rc, header_rc;
     const guint8 guard[MAD_BUFFER_GUARD] = {0};
@@ -180,6 +185,9 @@ error_code wav_output_finish(WavOutput **output)
     rc = out->error;
     if (rc == SR_SUCCESS && !out->channels) rc = SR_ERROR_DECODE_FAILURE;
     header_rc = write_header(out);
+    if (duration_ms)
+        *duration_ms = out->rate && out->channels
+            ? (guint64)out->bytes * 1000 / (out->rate * out->channels * 2) : 0;
     mad_synth_finish(&out->synth);
     mad_frame_finish(&out->frame);
     mad_stream_finish(&out->stream);

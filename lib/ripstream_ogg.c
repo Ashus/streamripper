@@ -116,6 +116,14 @@ ripstream_ogg_write_page (RIP_MANAGER_INFO *rmi, Ogg_page_reference *opr)
 	writer->m_started = 1;
     }
 
+    if (rmi->prefs->incomplete_min_duration_ms) {
+        unsigned char prefix[27 + 255 + 30];
+        unsigned long count = MIN(opr->m_page_len, sizeof(prefix));
+        rc = cbuf3_peek(cbuf3, (char *)prefix, &writer->m_next_byte, count);
+        if (rc != SR_SUCCESS) return rc;
+        filelib_update_ogg_duration(writer, prefix, count);
+    }
+
     /* Loop, writing up to one node at a time */
     bytes_remaining = opr->m_page_len;
     while (bytes_remaining > 0) {
@@ -252,7 +260,8 @@ ripstream_ogg_rip (RIP_MANAGER_INFO* rmi)
 
 	/* Write page to disk */
 	debug_printf ("Trying to write ogg page to disk\n");
-	ripstream_ogg_write_page (rmi, opr);
+        rc = ripstream_ogg_write_page (rmi, opr);
+        if (rc != SR_SUCCESS) return rc;
 
 	if (opr->m_page_flags & OGG_PAGE_EOS) {
 	    /* We don't immediately close the file here.  If the next track

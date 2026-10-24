@@ -433,6 +433,7 @@ prefs_get_global_defaults (GLOBAL_PREFS* global_prefs)
 static void
 prefs_get_stream_defaults (STREAM_PREFS* prefs)
 {
+    prefs->incomplete_min_duration_ms = 0;
     prefs->tls_insecure = FALSE;
     prefs->http10 = FALSE;
     prefs->wav = FALSE;

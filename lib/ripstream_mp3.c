@@ -633,7 +633,7 @@ ripstream_mp3_end_track (RIP_MANAGER_INFO* rmi,
     error_code rc;
 
     /* Flush complete audio frames and patch duration before appending ID3v1. */
-    rc = framed_audio_finish(&writer->m_audio);
+    rc = filelib_finish_audio(writer);
     if (rc != SR_SUCCESS) return rc;
 
     /* Add id3v1 if requested */

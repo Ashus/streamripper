@@ -374,6 +374,14 @@ struct writer
     FHANDLE          m_file;
     struct wav_output *m_wav;
     struct framed_audio *m_audio;
+    mchar            m_incomplete_filename[SR_MAX_PATH];
+    guint64          m_duration_ms;
+    BOOL             m_duration_known;
+    BOOL             m_is_incomplete;
+    BOOL             m_cleanup_blocked;
+    unsigned int     m_ogg_rate;
+    guint32          m_ogg_serial;
+    guint64          m_ogg_base_ms;
     TRACK_INFO       m_ti;
 };
 
@@ -468,6 +476,7 @@ struct FILELIB_INFO_struct
 typedef struct stream_prefs STREAM_PREFS;
 struct stream_prefs
 {
+    guint64 incomplete_min_duration_ms;
     BOOL tls_insecure;
     BOOL http10;
     BOOL wav;

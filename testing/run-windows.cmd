@@ -14,6 +14,8 @@ python testing\metadata_filter.py
 if errorlevel 1 goto failed
 python testing\audio_headers.py
 if errorlevel 1 goto failed
+python testing\incomplete_duration.py
+if errorlevel 1 goto failed
 python testing\silence_output.py build\core_regression.exe build\sample-5s.mp3 "%SR_TOOLCHAIN%\bin"
 if errorlevel 1 goto failed
 python testing\https_smoke.py dist\streamripper.exe build\sample-5s.mp3 "%SR_TOOLCHAIN%\bin\openssl.exe"

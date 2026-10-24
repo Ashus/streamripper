@@ -9,6 +9,7 @@
 #include "findsep.h"
 #include "track_info.h"
 #include "framed_audio.h"
+#include "filelib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <psapi.h>
@@ -67,6 +68,32 @@ static void parser_cycle(RIP_MANAGER_INFO *rmi)
 
 int main(int argc, char **argv)
 {
+#if OGG_VORBIS_FOUND
+    /* Granule timing is independent of byte count and chained sample rates. */
+    {
+        Writer writer = {0};
+        unsigned char page[58] = {0};
+        guint32 rate = GUINT32_TO_LE(44100);
+        guint64 granule = GUINT64_TO_LE(88200);
+        memcpy(page, "OggS", 4); page[5] = 2; page[14] = 1;
+        page[26] = 1; page[27] = 30; page[28] = 1;
+        memcpy(page + 29, "vorbis", 6); memcpy(page + 40, &rate, 4);
+        filelib_update_ogg_duration(&writer, page, sizeof(page));
+        CHECK(writer.m_duration_known && writer.m_duration_ms == 0);
+        page[5] = 0; memcpy(page + 6, &granule, 8);
+        filelib_update_ogg_duration(&writer, page, 27);
+        CHECK(writer.m_duration_ms == 2000);
+        page[5] = 2; page[14] = 2; memset(page + 6, 0, 8);
+        rate = GUINT32_TO_LE(48000); memcpy(page + 40, &rate, 4);
+        filelib_update_ogg_duration(&writer, page, sizeof(page));
+        page[5] = 4; granule = GUINT64_TO_LE(48000); memcpy(page + 6, &granule, 8);
+        filelib_update_ogg_duration(&writer, page, 27);
+        CHECK(writer.m_duration_ms == 3000 && !writer.m_cleanup_blocked);
+        page[5] = 2; page[28] = 0;
+        filelib_update_ogg_duration(&writer, page, sizeof(page));
+        CHECK(!writer.m_duration_known && writer.m_cleanup_blocked);
+    }
+#endif
     if (argc == 5 && !strcmp(argv[1], "--stress-frames")) {
         gchar *audio = NULL;
         gsize size;
@@ -98,19 +125,22 @@ int main(int argc, char **argv)
         CloseHandle(file); g_free(audio);
         return 0;
     }
-    if (argc == 6 && !strcmp(argv[1], "--frame-copy")) {
+    if (argc == 6 && (!strcmp(argv[1], "--frame-copy") || !strcmp(argv[1], "--frame-duration"))) {
         FILE *input = fopen(argv[3], "rb");
         FHANDLE file = CreateFileA(argv[4], GENERIC_WRITE, FILE_SHARE_READ, NULL,
                                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         FramedAudio *output = NULL;
         size_t count, block = atoi(argv[5]);
+        guint64 duration;
         char *buffer = g_malloc(block);
         CHECK(input && file != INVALID_HANDLE_VALUE && block);
         CHECK(framed_audio_init(&output, file,
               !strcmp(argv[2], "aac") ? CONTENT_TYPE_AAC : CONTENT_TYPE_MP3, -1) == SR_SUCCESS);
         while ((count = fread(buffer, 1, block, input)))
             CHECK(framed_audio_write(output, buffer, count) == SR_SUCCESS);
-        CHECK(framed_audio_finish(&output) == SR_SUCCESS);
+        CHECK(framed_audio_finish_duration(&output, &duration) == SR_SUCCESS);
+        if (!strcmp(argv[1], "--frame-duration"))
+            printf("%" G_GUINT64_FORMAT "\n", duration);
         CHECK(output == NULL);
         CHECK(framed_audio_finish(&output) == SR_SUCCESS);
         CloseHandle(file); fclose(input); g_free(buffer);
@@ -179,7 +209,30 @@ int main(int argc, char **argv)
     parse_metadata(&rmi, &ti);
     CHECK(!strcmp(ti.title, "No match"));
     parser_free(&rmi);
-    g_remove(rule_name);
+    {
+        Writer writer = {0};
+        g_strlcpy(writer.m_incomplete_filename, rule_name, sizeof(writer.m_incomplete_filename));
+        writer.m_is_incomplete = TRUE;
+        prefs.incomplete_min_duration_ms = 1000;
+        filelib_cleanup_incomplete(&rmi, &writer);
+        CHECK(g_file_test(rule_name, G_FILE_TEST_EXISTS)); /* Unknown duration. */
+        writer.m_duration_known = TRUE;
+        writer.m_duration_ms = 1000;
+        filelib_cleanup_incomplete(&rmi, &writer);
+        CHECK(g_file_test(rule_name, G_FILE_TEST_EXISTS)); /* Exactly the minimum. */
+        writer.m_duration_ms = 999;
+        writer.m_cleanup_blocked = TRUE;
+        filelib_cleanup_incomplete(&rmi, &writer);
+        CHECK(g_file_test(rule_name, G_FILE_TEST_EXISTS)); /* Failed finalization. */
+        writer.m_cleanup_blocked = FALSE;
+        writer.m_is_incomplete = FALSE;
+        filelib_cleanup_incomplete(&rmi, &writer);
+        CHECK(g_file_test(rule_name, G_FILE_TEST_EXISTS)); /* Completed recording. */
+        writer.m_is_incomplete = TRUE;
+        filelib_cleanup_incomplete(&rmi, &writer);
+        CHECK(!g_file_test(rule_name, G_FILE_TEST_EXISTS));
+        prefs.incomplete_min_duration_ms = 0;
+    }
     g_free(rule_name);
 
     /* Missing status delimiter must be rejected without dereferencing NULL. */

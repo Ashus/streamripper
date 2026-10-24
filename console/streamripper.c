@@ -34,6 +34,7 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <errno.h>
 #include "srtypes.h"
 #include "callback.h"
 #include "rip_manager.h"
@@ -310,6 +311,7 @@ print_usage (FILE* stream)
     fprintf(stream, "      -I interface   - Rip from specified interface (e.g. eth0)\n");
 #endif
     fprintf(stream, "      -T             - Truncate duplicated tracks in incomplete\n");
+    fprintf(stream, "      --incomplete-min-duration=N[s|m|h] - Discard shorter incomplete files (0=off)\n");
     fprintf(stream, "      -E command     - Run external command to fetch metadata\n");
     fprintf(stream, "      --quiet        - Don't print ripping status to console\n");
     fprintf(stream, "      --stderr       - Print ripping status to stderr (old behavior)\n");
@@ -557,6 +559,23 @@ parse_extended_options (STREAM_PREFS* prefs, char* rule)
     }
 
     /* Splitpoint options */
+    if (g_str_has_prefix(rule, "incomplete-min-duration=")) {
+        const char *value = rule + strlen("incomplete-min-duration=");
+        char *end;
+        guint64 amount, multiplier = 1000;
+        errno = 0;
+        amount = g_ascii_strtoull(value, &end, 10);
+        if (*end == 'm' && !end[1]) multiplier *= 60;
+        else if (*end == 'h' && !end[1]) multiplier *= 3600;
+        else if (*end && !(*end == 's' && !end[1])) multiplier = 0;
+        if (!g_ascii_isdigit(*value) || errno == ERANGE || !multiplier ||
+            amount > G_MAXUINT64 / multiplier) {
+            fprintf(stderr, "Invalid incomplete duration; use non-negative integer seconds, e.g. 30s, 10m, or 1h.\n");
+            exit(EXIT_FAILURE);
+        }
+        prefs->incomplete_min_duration_ms = amount * multiplier;
+        return;
+    }
     if (!strcmp(rule, "insecure")) {
         prefs->tls_insecure = TRUE;
         return;

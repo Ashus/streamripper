@@ -114,7 +114,7 @@ static int get_next_sequence_number (RIP_MANAGER_INFO* rmi, gchar* fn_base);
 static void fill_date_buf (RIP_MANAGER_INFO* rmi, gchar* datebuf, 
 			   int datebuf_len);
 static error_code filelib_open_showfiles (RIP_MANAGER_INFO* rmi);
-static void move_file (RIP_MANAGER_INFO* rmi, gchar* new_filename, gchar* old_filename);
+static BOOL move_file (RIP_MANAGER_INFO* rmi, gchar* new_filename, gchar* old_filename);
 static gchar* replace_invalid_chars (gchar *str);
 static void remove_trailing_periods (gchar *str);
 static BOOL new_file_is_better (RIP_MANAGER_INFO* rmi, gchar *oldfile, gchar *newfile);
@@ -302,8 +302,10 @@ filelib_start (RIP_MANAGER_INFO* rmi, Writer *writer, TRACK_INFO* ti)
 				  fnbase, fli->m_extension);
     }
     mstrcpy (fli->m_incomplete_filename, newfile);
+    mstrcpy (writer->m_incomplete_filename, newfile);
     {
         error_code rc = filelib_open_for_write (rmi, &writer->m_file, newfile);
+        writer->m_is_incomplete = rc == SR_SUCCESS;
         if (rc == SR_SUCCESS && rmi->prefs->wav)
             rc = wav_output_init(&writer->m_wav, writer->m_file);
         return rc;
@@ -329,10 +331,13 @@ filelib_write_cue (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti, int secs)
 error_code
 filelib_write_track (Writer *writer, char *buf, u_long size)
 {
+    error_code rc;
     debug_printf ("filelib_write_track %p %u\n", buf, size);
-    if (writer->m_wav) return wav_output_write(writer->m_wav, buf, size);
-    if (writer->m_audio) return framed_audio_write(writer->m_audio, buf, size);
-    return filelib_write (writer->m_file, buf, size);
+    if (writer->m_wav) rc = wav_output_write(writer->m_wav, buf, size);
+    else if (writer->m_audio) rc = framed_audio_write(writer->m_audio, buf, size);
+    else rc = filelib_write (writer->m_file, buf, size);
+    if (rc != SR_SUCCESS) writer->m_cleanup_blocked = TRUE;
+    return rc;
 }
 
 error_code
@@ -397,7 +402,7 @@ filelib_rename_to_complete (
     case OVERWRITE_LARGER:
 	/* Smart overwriting -- only overwrite if new file is bigger */
 	ok_to_write = new_file_is_better (rmi, new_path, 
-					  fli->m_incomplete_filename);
+					  writer->m_incomplete_filename);
 	break;
     case OVERWRITE_VERSION:
     default:
@@ -417,10 +422,21 @@ filelib_rename_to_complete (
 	if (file_exists (rmi, new_path)) {
 	    delete_file (rmi, new_path);
 	}
-	move_file (rmi, new_path, fli->m_incomplete_filename);
+	if (!move_file (rmi, new_path, writer->m_incomplete_filename)) {
+            writer->m_cleanup_blocked = TRUE;
+            return SR_ERROR_CANT_WRITE_TO_FILE;
+        }
+        writer->m_is_incomplete = FALSE;
     } else {
-	if (truncate_dup && file_exists (rmi, fli->m_incomplete_filename)) {
-	    truncate_file (rmi, fli->m_incomplete_filename);
+	if (truncate_dup && file_exists (rmi, writer->m_incomplete_filename)) {
+	    truncate_file (rmi, writer->m_incomplete_filename);
+            char path[SR_MAX_PATH];
+            GStatBuf info;
+            string_from_gstring(rmi, path, sizeof(path), writer->m_incomplete_filename, CODESET_FILESYS);
+            if (g_stat(path, &info) == 0 && info.st_size == 0) {
+                writer->m_duration_known = TRUE;
+                writer->m_duration_ms = 0;
+            }
 	}
     }
 
@@ -444,11 +460,89 @@ filelib_close (
 	return SR_SUCCESS;
     }
     {
-        error_code rc = framed_audio_finish(&writer->m_audio);
-        error_code wav_rc = wav_output_finish(&writer->m_wav);
+        error_code rc = filelib_finish_audio(writer);
         close_file (&writer->m_file);
-        return rc != SR_SUCCESS ? rc : wav_rc;
+        return rc;
     }
+}
+
+error_code filelib_finish_audio(Writer *writer)
+{
+    error_code rc = SR_SUCCESS;
+    if (writer->m_audio) {
+        rc = framed_audio_finish_duration(&writer->m_audio, &writer->m_duration_ms);
+        writer->m_duration_known = rc == SR_SUCCESS;
+    }
+    if (writer->m_wav) {
+        error_code wav_rc = wav_output_finish_duration(&writer->m_wav, &writer->m_duration_ms);
+        writer->m_duration_known = wav_rc == SR_SUCCESS;
+        if (rc == SR_SUCCESS) rc = wav_rc;
+    }
+    if (rc != SR_SUCCESS) writer->m_cleanup_blocked = TRUE;
+    return rc;
+}
+
+void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer)
+{
+    guint64 minimum = rmi->prefs->incomplete_min_duration_ms;
+    if (!minimum || !writer->m_is_incomplete || writer->m_cleanup_blocked ||
+        !writer->m_incomplete_filename[0]) return;
+    if (!writer->m_duration_known) {
+        fprintf(stderr, "Keeping incomplete recording with unknown duration: %s\n",
+                writer->m_incomplete_filename);
+        return;
+    }
+    if (writer->m_duration_ms < minimum) {
+        char path[SR_MAX_PATH];
+        string_from_gstring(rmi, path, sizeof(path), writer->m_incomplete_filename, CODESET_FILESYS);
+        if (g_unlink(path) != 0) {
+            fprintf(stderr, "Unable to remove incomplete recording: %s\n", path);
+            return;
+        }
+        fprintf(stderr, "Discarded incomplete recording (%" G_GUINT64_FORMAT
+                " ms < %" G_GUINT64_FORMAT " ms): %s\n",
+                writer->m_duration_ms, minimum, path);
+        writer->m_is_incomplete = FALSE;
+    }
+}
+
+/* Inspect complete Ogg page prefixes, already validated by the Ogg reader. */
+void filelib_update_ogg_duration(Writer *writer, const unsigned char *header, size_t size)
+{
+#if OGG_VORBIS_FOUND
+    ogg_page page;
+    ogg_int64_t granule;
+    guint32 serial;
+    if (size < 27 || memcmp(header, "OggS", 4)) return;
+    memset(&page, 0, sizeof(page));
+    page.header = (unsigned char *)header;
+    page.header_len = size;
+    serial = (guint32)ogg_page_serialno(&page);
+    if (ogg_page_bos(&page)) {
+        size_t body = 27 + header[26];
+        writer->m_ogg_base_ms = writer->m_duration_ms;
+        writer->m_ogg_serial = serial;
+        writer->m_ogg_rate = 0;
+        if (size >= body + 30 && header[body] == 1 &&
+            !memcmp(header + body + 1, "vorbis", 6)) {
+            const unsigned char *p = header + body + 12;
+            writer->m_ogg_rate = (guint32)p[0] | (guint32)p[1] << 8 |
+                (guint32)p[2] << 16 | (guint32)p[3] << 24;
+        }
+    }
+    if (!writer->m_ogg_rate || writer->m_ogg_serial != serial) {
+        writer->m_duration_known = FALSE;
+        writer->m_cleanup_blocked = TRUE;
+        return;
+    }
+    granule = ogg_page_granulepos(&page);
+    if (granule >= 0) {
+        guint64 samples = (guint64)granule;
+        writer->m_duration_ms = writer->m_ogg_base_ms + samples / writer->m_ogg_rate * 1000
+            + samples % writer->m_ogg_rate * 1000 / writer->m_ogg_rate;
+        writer->m_duration_known = TRUE;
+    }
+#endif
 }
 
 void
@@ -460,6 +554,7 @@ filelib_shutdown (RIP_MANAGER_INFO* rmi)
             Writer *writer = node->data;
             if (writer->m_started && filelib_close(rmi, writer) != SR_SUCCESS)
                 fprintf(stderr, "Unable to finalize incomplete audio output.\n");
+            if (writer->m_started) filelib_cleanup_incomplete(rmi, writer);
         }
     }
     close_files (rmi);
@@ -1101,7 +1196,7 @@ truncate_file (RIP_MANAGER_INFO* rmi, gchar* filename)
 #endif
 }
 
-static void
+static BOOL
 move_file (RIP_MANAGER_INFO* rmi, gchar* new_filename, gchar* old_filename)
 {
     char old_fn[SR_MAX_PATH];
@@ -1109,9 +1204,9 @@ move_file (RIP_MANAGER_INFO* rmi, gchar* new_filename, gchar* old_filename)
     string_from_gstring (rmi, old_fn, SR_MAX_PATH, old_filename, CODESET_FILESYS);
     string_from_gstring (rmi, new_fn, SR_MAX_PATH, new_filename, CODESET_FILESYS);
 #if defined WIN32
-    MoveFile(old_fn, new_fn);
+    return MoveFile(old_fn, new_fn);
 #else
-    rename (old_fn, new_fn);
+    return rename (old_fn, new_fn) == 0;
 #endif
 }
 

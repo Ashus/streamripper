@@ -7,4 +7,5 @@ typedef struct wav_output WavOutput;
 error_code wav_output_init(WavOutput **output, FHANDLE file);
 error_code wav_output_write(WavOutput *output, const char *data, size_t size);
 error_code wav_output_finish(WavOutput **output);
+error_code wav_output_finish_duration(WavOutput **output, guint64 *duration_ms);
 #endif
