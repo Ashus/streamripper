@@ -11,6 +11,8 @@ python testing\cli_options.py
 if errorlevel 1 goto failed
 python testing\console_output.py
 if errorlevel 1 goto failed
+python testing\console_close.py
+if errorlevel 1 goto failed
 python testing\package_smoke.py "%SR_TOOLCHAIN%"
 if errorlevel 1 goto failed
 python testing\sequence_number.py

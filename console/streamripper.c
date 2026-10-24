@@ -69,6 +69,30 @@ static BOOL			m_print_stderr = FALSE;
 static int                      m_exit_code = EXIT_SUCCESS;
 time_t				m_stop_time = 0;
 
+#ifdef WIN32
+static HANDLE m_stop_event;
+static HANDLE m_shutdown_complete;
+
+static BOOL WINAPI
+console_control_handler(DWORD event)
+{
+    switch (event) {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_LOGOFF_EVENT:
+    case CTRL_SHUTDOWN_EVENT:
+        SetEvent(m_stop_event);
+        /* Returning from a close handler terminates the process immediately.
+           Let the main thread finalize writers and apply incomplete retention. */
+        WaitForSingleObject(m_shutdown_complete, INFINITE);
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+#endif
+
 /* main()
  * parse the aguments, tell the rip_mananger to start, we get in rip
  * status from our rip_callback function. m_opt was set from parse args
@@ -103,6 +127,16 @@ main (int argc, char *argv[])
     
     rip_manager_init ();
 
+#ifdef WIN32
+    m_stop_event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    m_shutdown_complete = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!m_stop_event || !m_shutdown_complete ||
+        !SetConsoleCtrlHandler(console_control_handler, TRUE)) {
+        sr_console_printf(stderr, "Unable to install console shutdown handler.\n");
+        return EXIT_FAILURE;
+    }
+#endif
+
     /* Launch the ripping thread */
     if ((ret = rip_manager_start (&rmi, &prefs, rip_callback)) != SR_SUCCESS) {
 	sr_console_printf(stderr, "Couldn't connect to %s\n", prefs.url);
@@ -115,7 +149,14 @@ main (int argc, char *argv[])
      * in FreeBSD 3.4, i don't know about linux or NT.
      */
     while (!m_got_sig && !m_alldone) {
+#ifdef WIN32
+        if (WaitForSingleObject(m_stop_event, 1000) == WAIT_OBJECT_0) {
+            m_got_sig = TRUE;
+            break;
+        }
+#else
 	sleep(1);
+#endif
 	time(&temp_time);
 	if (m_stop_time && (temp_time >= m_stop_time)) {
 	    print_to_console ("\nTime to stop is here, bailing\n");
@@ -129,6 +170,10 @@ main (int argc, char *argv[])
     rip_manager_cleanup ();
     prefs_cleanup();
     free(rmi);
+#ifdef WIN32
+    /* Event handles live until process exit so an active handler can use them. */
+    SetEvent(m_shutdown_complete);
+#endif
 #ifdef SR_MODERN_WINDOWS
     g_strfreev(argv);
 #endif
