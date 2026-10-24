@@ -361,6 +361,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "--codeset-filesys=NAME", "Set the file-system encoding");
     print_usage_option(stream, "--codeset-relay=NAME", "Set the relay metadata encoding");
     fputs("\nLogging:\n", stream);
+    print_usage_option(stream, "--metadata-log", "Log ICY title changes in incomplete/metadata.log");
     print_usage_option(stream, "--quiet", "Hide recording status");
     print_usage_option(stream, "--stderr", "Write recording status to stderr");
     print_usage_option(stream, "--debug", "Write a debugging trace");
@@ -670,6 +671,10 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
     }
 
     /* Logging options */
+    if (!strcmp(rule, "metadata-log")) {
+        prefs->metadata_log = TRUE;
+        return;
+    }
     if (!strcmp(rule,"debug")) {
 	debug_enable();
 	return;

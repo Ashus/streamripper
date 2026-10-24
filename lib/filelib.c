@@ -157,6 +157,7 @@ filelib_init (RIP_MANAGER_INFO* rmi,
     fli->m_do_show = do_show_file;
     fli->m_do_individual_tracks = do_individual_tracks;
     fli->m_track_no = 1;
+    fli->m_have_logged_metadata = FALSE;
     
     debug_printf ("FILELIB_INIT: output_directory=%s\n",
 		  output_directory ? output_directory : "");
@@ -277,6 +278,51 @@ filelib_init (RIP_MANAGER_INFO* rmi,
     }
 
     return SR_SUCCESS;
+}
+
+void
+filelib_log_metadata(RIP_MANAGER_INFO *rmi, const mchar *title)
+{
+    FILELIB_INFO *fli = &rmi->filelib_info;
+    gchar *path, *timestamp;
+    GDateTime *now;
+    GString *line;
+    FILE *log;
+    BOOL failed;
+
+    if (!rmi->prefs->metadata_log ||
+        (fli->m_have_logged_metadata && !mstrcmp(fli->m_logged_metadata, title))) return;
+    mstrcpy(fli->m_logged_metadata, title);
+    fli->m_have_logged_metadata = TRUE;
+
+    /* Preserve UTF-8 and escape controls so each update occupies one line. */
+    now = g_date_time_new_now_local();
+    timestamp = g_date_time_format(now, "%Y-%m-%dT%H:%M:%S%z");
+    line = g_string_new(timestamp);
+    g_string_append_c(line, '\t');
+    for (const char *p = title; *p; p++) {
+        if (*p == '\\') g_string_append(line, "\\\\");
+        else if (*p == '\n') g_string_append(line, "\\n");
+        else if (*p == '\r') g_string_append(line, "\\r");
+        else if (*p == '\t') g_string_append(line, "\\t");
+        else if ((unsigned char)*p < 32 || *p == 127)
+            g_string_append_printf(line, "\\x%02X", (unsigned char)*p);
+        else g_string_append_c(line, *p);
+    }
+    g_string_append_c(line, '\n');
+    path = g_build_filename(fli->m_incomplete_directory, "metadata.log", NULL);
+    failed = g_mkdir_with_parents(fli->m_incomplete_directory, 0777) != 0;
+    log = failed ? NULL : g_fopen(path, "ab");
+    if (!log) failed = TRUE;
+    else {
+        if (fwrite(line->str, 1, line->len, log) != line->len) failed = TRUE;
+        if (fclose(log)) failed = TRUE;
+    }
+    if (failed) fprintf(stderr, "Could not append ICY metadata to %s\n", path);
+    g_free(path);
+    g_string_free(line, TRUE);
+    g_free(timestamp);
+    g_date_time_unref(now);
 }
 
 error_code

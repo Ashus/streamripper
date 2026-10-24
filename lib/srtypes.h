@@ -470,6 +470,8 @@ struct FILELIB_INFO_struct
     mchar m_session_datebuf[DATEBUF_LEN];
     mchar m_stripped_icy_name[SR_MAX_PATH];
     int m_track_no;
+    BOOL m_have_logged_metadata;
+    mchar m_logged_metadata[MAX_TRACK_LEN];
 };
 
 
@@ -477,6 +479,7 @@ struct FILELIB_INFO_struct
 typedef struct stream_prefs STREAM_PREFS;
 struct stream_prefs
 {
+    BOOL metadata_log;
     guint64 incomplete_min_duration_ms;
     BOOL tls_insecure;
     BOOL http10;

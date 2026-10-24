@@ -24,6 +24,7 @@
 #include "mchar.h"
 #include "debug.h"
 #include "srtypes.h"
+#include "filelib.h"
 
 /*****************************************************************************
  * Private global variables
@@ -481,6 +482,7 @@ parse_metadata (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti)
     debug_printf ("Converting query string to wide\n");
     gstring_from_string (rmi, query_string, MAX_TRACK_LEN, 
 			 ti->raw_metadata, CODESET_METADATA);
+    filelib_log_metadata(rmi, query_string);
     for (rulep = rmi->parse_rules; rulep->cmd; rulep++) {
 #if !defined (USE_GLIB_REGEX)
 	regmatch_t pmatch[MAX_SUBMATCHES+1];
