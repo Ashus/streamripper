@@ -151,6 +151,9 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	    return http_sc_connect_internal (rmi, sock, redirect,
 				    proxyurl, info, useragent, if_name, redirects + 1);
 	} else {
+            g_snprintf(rmi->stream_host, sizeof(rmi->stream_host),
+                       strchr(target_info.host, ':') ? "[%s]:%d" : "%s:%d",
+                       target_info.host, target_info.port);
 	    break;
 	}
     }

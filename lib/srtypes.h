@@ -543,6 +543,7 @@ struct RIP_MANAGER_INFOst
     STREAM_PREFS *prefs;
     char streamname[MAX_STREAMNAME_LEN];
     char server_name[MAX_SERVER_LEN];
+    char stream_host[MAX_URL_LEN];
     int	status;
     int	meta_interval;
 

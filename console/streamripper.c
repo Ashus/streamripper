@@ -221,10 +221,12 @@ print_status (RIP_MANAGER_INFO *rmi)
 			
     }
     if (!printed_fullinfo) {
-	print_to_console ("stream: %s\n"
-			  "server name: %s\n",
-			  rmi->streamname,
-			  rmi->server_name);
+	print_to_console ("host: %s\n"
+			  "server name: %s\n"
+			  "stream: %s\n",
+			  rmi->stream_host,
+			  rmi->server_name,
+			  rmi->streamname);
 	if (rmi->http_bitrate > 0) {
 	    print_to_console ("declared bitrate: %d\n",
 			      rmi->http_bitrate);

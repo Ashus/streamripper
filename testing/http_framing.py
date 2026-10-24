@@ -19,6 +19,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path == '/redirect':
+            self.send_response(302)
+            self.send_header('Location', f'http://127.0.0.1:{self.server.server_port}/valid')
+            self.send_header('Connection', 'close')
+            self.end_headers()
+            return
         self.send_response(200)
         self.send_header('Content-Type', 'audio/mpeg')
         self.send_header('icy-name', 'Framing')
@@ -55,14 +61,16 @@ with tempfile.TemporaryDirectory(prefix='streamripper-framing-') as tmp:
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        for name in ('valid', 'bad-hex', 'overflow', 'missing-crlf', 'truncated', 'bad-trailer'):
+        for name in ('valid', 'redirect', 'bad-hex', 'overflow', 'missing-crlf', 'truncated', 'bad-trailer'):
             dest = root / name
             result = subprocess.run([str(exe), f'http://localhost:{server.server_port}/{name}',
                                      '-c', '-A', '-a', 'show', '-l', '5', '-d', str(dest)],
                                     capture_output=True, timeout=12)
             output = result.stdout + result.stderr
             assert result.returncode == 0, output
-            if name == 'valid':
+            if name in ('valid', 'redirect'):
+                host = '127.0.0.1' if name == 'redirect' else 'localhost'
+                assert f'host: {host}:{server.server_port}\n'.encode() in output.replace(b'\r\n', b'\n'), output
                 path = next(dest.rglob('show.mp3'))
                 assert path.read_bytes() == audio, (path.stat().st_size, len(audio), output[-1000:])
             else:
