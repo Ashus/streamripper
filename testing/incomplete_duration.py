@@ -31,7 +31,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         source = aac * 200 if self.path.startswith('/aac') else mp3
         offset = 0
         try:
-            for i in range(1000):
+            for i in range(180 if '/finite/' in self.path else 1000):
                 block = (source * (16384 // len(source) + 2))[offset:offset + 16384]
                 offset = (offset + 16384) % len(source)
                 if named:
@@ -48,11 +48,14 @@ server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
-def run(dest, kind, duration=None, named=False, extra=()):
+def run(dest, kind, duration=None, named=False, extra=(), finite=False):
     endpoint = 'aac' if kind == 'aac' else 'mp3'
+    endpoint += '/finite' if finite else ''
     endpoint += '/named' if named else '/no-metadata'
     args = [str(exe), f'http://localhost:{server.server_port}/{endpoint}',
-            '-c', '-l', '2', '-s', '-d', str(dest), '--xs-none']
+            '-c', '-s', '-d', str(dest), '--xs-none']
+    if not finite:
+        args.extend(('-l', '2'))
     if kind == 'wav':
         args.append('--wav')
     if duration is not None:
@@ -134,9 +137,14 @@ try:
         dest = root / 'truncated'
         dest.mkdir()
         (dest / 'Artist - Song 1.mp3').write_bytes(old)
-        files, result = run(dest, 'mp3', '1s', named=True, extra=('-k', '0', '-o', 'never', '-T'))
+        # Complete the duplicate's queued writer before shutdown. A two-second
+        # wall-clock cutoff can leave this writer unfinished on slower runs.
+        files, result = run(dest, 'mp3', '1s', named=True, finite=True,
+                            extra=('-k', '0', '-o', 'never', '-T'))
         assert (dest / 'Artist - Song 1.mp3').read_bytes() == old
         assert not (dest / 'incomplete' / 'Artist - Song 1.mp3').exists()
+        assert re.search(rb'Discarded incomplete recording \(0 s < 1 s\): Artist - Song 1\.mp3',
+                         result.stderr), result.stderr
         print('PASS: -T truncated duplicate counts as zero retained audio duration')
 
         dest = root / 'show'
