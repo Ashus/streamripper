@@ -58,10 +58,10 @@ m/^A suivre:/e
 # Strip off anything like "- Mp3Pro" from the end of the string
 # The leading "s" says this is a substitution rule
 # The trailing "i" means case insensitive matching
-s/[[:space:]]*-?[[:space:]]*mp3pro$//i
+s/\s*-?\s*mp3pro$//i
 
 # Strip off something like "- " from the beginning of the string
-s/^[[:space:]]*-[[:space:]]*//
+s/^\s*-\s*//
 
 # The strip rules don't have to be after the m//e, m//s and m//x 
 # rules.  You can interleave them.  Rules are always processed
@@ -72,11 +72,11 @@ s/^[[:space:]]*-[[:space:]]*//
 # This is the normal parsing rule: "Artist - Title"
 # The trailing "A1" means that the artist (A) matches subpattern 1
 # The trailing "T2" means that the title (T) matches subpattern 2
-m/^[[:space:]]*(.*?[^-[:space:]])[[:space:]]+-[[:space:]]+(.*)[[:space:]]*$/A1T2
-m/^[[:space:]]*([^-]*[^-[:space:]])[[:space:]]*-[[:space:]]*(.*)[[:space:]]*$/A1T2
+m/^\s*(.*?[^-\s])\s+-\s+(.*)\s*$/A1T2
+m/^\s*([^-]*[^-\s])\s*-\s*(.*)\s*$/A1T2
 
 # This is slightly different parsing rule: "Artist, Title"
-## m/^[[:space:]]*([^,]*[^,[:space:]])[[:space:]]*,[[:space:]]*(.*)[[:space:]]*$/A1T2
+## m/^\s*([^,]*[^,\s])\s*,\s*(.*)\s*$/A1T2
 
 # After the first match with an m//A or m//T rule, no more rules 
 # will be checked.

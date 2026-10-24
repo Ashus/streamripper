@@ -8,9 +8,9 @@
 m/\badvert\b/ix
 
 # Optional: exclude explicitly empty or hyphen-only titles.
-# m/^[[:space:]-]*$/x
+# m/^[\s-]*$/x
 
 # Preserve the standard MP3Pro cleanup and Artist - Title parsing.
-s/[[:space:]]*-?[[:space:]]*mp3pro$//i
-m/^[[:space:]]*(.*?[^-[:space:]])[[:space:]]+-[[:space:]]+(.*)[[:space:]]*$/A1T2
-m/^[[:space:]]*([^-]*[^-[:space:]])[[:space:]]*-[[:space:]]*(.*)[[:space:]]*$/A1T2
+s/\s*-?\s*mp3pro$//i
+m/^\s*(.*?[^-\s])\s+-\s+(.*)\s*$/A1T2
+m/^\s*([^-]*[^-\s])\s*-\s*(.*)\s*$/A1T2
