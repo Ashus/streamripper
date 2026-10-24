@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.68.1
+
+### Breaking changes
+
+- User INI files are no longer loaded or saved automatically. Existing settings
+  apply only when explicitly loaded with `--config FILE`. Configuration files
+  are read-only; command-line options override their values.
+
+### Features
+
+- Detect UTF-8 ICY metadata automatically, with a legacy-encoding fallback.
+  Explicit encoding options and explicitly loaded configuration remain supported.
+- Add `--metadata-log` to save timestamped ICY title changes before filtering or
+  rewriting in `incomplete/metadata.log`, independently of recorded filenames.
+- Add `--incomplete-min-duration=N[s|m|h]` to remove short incomplete recordings
+  by actual audio duration. Completed tracks, older files and continuous
+  recordings are preserved; unknown durations and failed outputs are kept.
+- Show track duration as `MM:SS` or `H:MM:SS`, falling back to readable byte
+  sizes when unknown. Distinguish `incomplete`, `filtered` and `ripping` states,
+  and show the final stream hostname/port and relay bind address.
+- Reserve audio disk space in 2 MiB increments to reduce fragmentation on Windows
+  and Linux ext4. Unused reservations are released during normal finalization;
+  unsupported filesystems and allocation failures fall back to ordinary writes.
+- Prevent concurrent recordings into the same directory with `incomplete/.lock`.
+  Ownership survives reconnects, normal shutdown removes the lock file, and
+  stale files after a crash do not block a new recording.
+- Add accurate per-file MP3 duration headers and AAC/MP3 duration tags without
+  re-encoding or FFmpeg, including the final incomplete recording.
+- Add IPv6 HTTP/HTTPS and relay support, with IPv4 fallback and `-4` / `--ipv4`
+  and `-6` / `--ipv6` selection. Relay and outgoing address families are independent.
+- Support HTTPS stations through HTTP CONNECT proxies and HTTPS proxies,
+  including authentication and independent certificate verification for each
+  TLS connection. `--tls-info` reports origin and proxy details once per run.
+- Add descriptive long aliases for existing CLI options while retaining short
+  forms. Accept spaced and equals values and reorganize command-line help.
+- Restore Linux source builds and validate recording, HTTPS, ext4 allocation,
+  locks and signal cleanup on Debian 13/WSL2. Provide separate complete Windows
+  and Linux build guides; Linux users build from source without `.deb` packages.
+- Include a complete metadata-rule guide and generic filtering examples.
+  Resolve the default Windows toolchain relative to the repository.
+
+### Fixes
+
+- Restore metadata-rule exclusion, including WAV output, without gaps in saved
+  track numbering. Support Unicode rule paths and detect save/exclude changes
+  even when artist and title stay the same.
+- Fix automatic `%q` numbering at the start of Windows filenames and after restart.
+- Preserve Unicode in Windows consoles regardless of code page, keep redirected
+  output in UTF-8, and avoid cutting multi-byte characters when shortening titles.
+- Finalize recordings and check incomplete retention when closing the Windows
+  console, as well as during normal shutdown.
+- Prevent overlapping Windows relay listeners from sharing a port; scan for the
+  next available port instead of reporting a listener that conflicts with another.
+- Align AAC cuts to complete frames, preserve the final byte of MP3 split frames,
+  and replace stale source duration headers.
+- Keep incomplete cleanup tied to each writer, report failed file promotions,
+  and avoid accumulated rounding errors in AAC/MP3 duration calculations.
+- Remove unwanted `dump.mp3` and `gcs1.txt` writes. Recover stalled alternative
+  silence detection without terminating the recorder.
+- Fix packaging into a fresh directory and consistently reject invalid timeout
+  values or values supplied to flags that take no argument.
+
 ## 1.68.0
 
 First public release of this independent Windows CLI fork, based on upstream

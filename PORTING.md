@@ -31,6 +31,11 @@ The first public release is **1.68.0**, without a feature-specific version suffi
 - **Jakub Kaprzyk**: long ICY-name destination bounds and non-terminated metadata
   audit reviewed against `cf9e93c`. Winamp preference removal was checked against
   `e3a1240`. The corresponding source changes are adapted to the Windows implementation.
+  CONNECT proxy flow was also reviewed against his
+  [`56b6903`](https://github.com/jaakristioja/streamripper/commit/56b690331bbd473a47cb2e72644bf08b2f356ce4).
+  The local implementation adds bounded response parsing, all successful 2xx
+  statuses, informational-response handling, IPv6 authorities, and verified
+  HTTPS-proxy TLS layering; these parts were implemented independently.
 
 Commit messages identify original authors and source revisions where changes were adapted.
 New HTTP chunk decoding, Windows thread/handle lifetime fixes, and regression tests
@@ -44,7 +49,7 @@ were implemented locally; they are not a wholesale import of either fork.
   The latter changes PATH lookup and does not by itself prevent command injection.
 - Autotools-generated artifacts, bundled test frameworks, cross-build containers,
   and changes that only support removed Winamp/Windows targets in another fork.
-- HLS, FLAC, CONNECT proxy tunneling, minimp3, AAC silence detection, AAC/Ogg-to-WAV,
+- HLS, FLAC, minimp3, AAC silence detection, AAC/Ogg-to-WAV,
   flexible duration syntax, and broader numeric-option validation. These remain
   candidates for a subsequent Windows release and require separate porting/tests.
 - No claim is made that this review found every inherited defect.
@@ -64,6 +69,16 @@ were implemented locally; they are not a wholesale import of either fork.
   are hardened and covered by malformed/long-header tests.
 
 ## Memory and resource checks
+
+`gcs_notes.txt` is retained as historical material pending review of its remaining
+open items. The first-track skipping status now retains the displayed track's
+decision before the writer count is incremented, matching the zero-based writer
+index used for dropping.
+The old libmad Valgrind warning has not been reproduced or ruled out with a
+memory-access checker on the current library. AAC/Ogg-specific integration coverage
+also remains incomplete; the current audio regression fixtures exercise MP3.
+Windows 98, Winamp, CVS, old SDK build instructions, and sample server headers in
+that file are historical and are not supported build instructions for this fork.
 
 The Windows regression program processes 100,000 metadata changes, creates/destroys
 1,000 rule sets, and starts/stops 200 failed connection managers in one process.

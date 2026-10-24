@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=release) as temporary:
     shutil.copytree(repo / 'third_party' / 'licenses', stage / 'licenses', dirs_exist_ok=True)
     (stage / 'licenses' / 'libmad').mkdir(exist_ok=True)
     shutil.copy2(repo / 'COPYING', stage / 'licenses' / 'libmad' / 'COPYING')
-    for name in ('COPYING', 'README', 'README.md', 'README-HTTPS.md', 'BUILDING.md', 'CHANGELOG.md',
+    for name in ('COPYING', 'README', 'README.md', 'BUILDING.md', 'BUILDING-WINDOWS.md', 'BUILDING-LINUX.md', 'CHANGELOG.md',
                  'PORTING.md', 'VERSION', 'THIRD-PARTY.md', 'METADATA-RULES.md',
                  'parse_rules.txt', 'advert_rules.txt'):
         shutil.copy2(repo / name, stage / name)
