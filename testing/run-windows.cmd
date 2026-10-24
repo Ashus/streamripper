@@ -35,6 +35,8 @@ python testing\proxy_connect.py "%SR_TOOLCHAIN%"
 if errorlevel 1 goto failed
 python testing\relay_stress.py dist\streamripper.exe build\sample-5s.mp3
 if errorlevel 1 goto failed
+python testing\relay_ports.py
+if errorlevel 1 goto failed
 python testing\wav_smoke.py dist\streamripper.exe build\core_regression.exe "%SR_TOOLCHAIN%\bin\lame.exe" build\sample-3s.wav build\sample-5s.mp3
 if errorlevel 1 goto failed
 popd

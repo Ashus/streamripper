@@ -237,10 +237,13 @@ print_status (RIP_MANAGER_INFO *rmi)
 			      rmi->meta_interval);
 	}
 	if (GET_MAKE_RELAY(prefs->flags)) {
-	    print_to_console ("relay port: %d\n"
-			      "[%14s]\r",
-			      prefs->relay_port,
-			      "getting track name... ");
+            if (prefs->relay_ip[0]) {
+                print_to_console(strchr(prefs->relay_ip, ':') ? "relay: [%s]:%u\n" : "relay: %s:%u\n",
+                                 prefs->relay_ip, prefs->relay_port);
+            } else {
+                print_to_console("relay port: %u\n", prefs->relay_port);
+            }
+	    print_to_console ("[%14s]\r", "getting track name... ");
 	}
 
 	printed_fullinfo = TRUE;

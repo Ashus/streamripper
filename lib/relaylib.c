@@ -362,7 +362,17 @@ try_port (RELAYLIB_INFO* rli, u_short port, char *if_name, char *relay_ip)
                     continue;
                 }
             }
-#ifndef WIN32
+#ifdef WIN32
+            {
+                int exclusive = 1;
+                /* Reserve both stacks for a wildcard dual-stack listener. */
+                if (setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                               (char *)&exclusive, sizeof(exclusive)) != 0) {
+                    closesocket(sock);
+                    continue;
+                }
+            }
+#else
             {
                 int reuse = 1;
                 setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse));
