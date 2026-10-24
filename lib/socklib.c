@@ -125,6 +125,10 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
 	return SR_ERROR_INVALID_PARAM;
 
     socket_handle->closed = TRUE;
+    socket_handle->chunked = FALSE;
+    socket_handle->chunk_done = FALSE;
+    socket_handle->chunk_crlf = FALSE;
+    socket_handle->chunk_remaining = 0;
 
     /* On error:
        Unix returns -1 and sets errno.
@@ -361,8 +365,8 @@ socklib_read_header(RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
     return SR_SUCCESS;
 }
 
-error_code
-socklib_recvall (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle, 
+static error_code
+socklib_recv_raw (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 		 char* buffer, int size, int timeout)
 {
     int ret = 0, read = 0;
@@ -435,6 +439,77 @@ socklib_recvall (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
     }
 
     return read;
+}
+
+/* Decode HTTP transfer framing before ICY's byte counters see the body. */
+static error_code
+socklib_chunk_line (RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *line, int capacity, int timeout)
+{
+    int i;
+    for (i = 0; i < capacity - 1; i++) {
+        int rc = socklib_recv_raw(rmi, sock, line + i, 1, timeout);
+        if (rc < 0) return rc;
+        if (rc != 1) return SR_ERROR_RECV_FAILED;
+        if (line[i] == '\n') {
+            if (i == 0 || line[i - 1] != '\r') return SR_ERROR_RECV_FAILED;
+            line[i - 1] = 0;
+            return SR_SUCCESS;
+        }
+    }
+    return SR_ERROR_RECV_FAILED;
+}
+
+error_code
+socklib_recvall (RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *buffer, int size, int timeout)
+{
+    int total = 0;
+    if (!sock->chunked) return socklib_recv_raw(rmi, sock, buffer, size, timeout);
+    while (size > 0 && !sock->chunk_done) {
+        int rc, count;
+        if (!sock->chunk_remaining) {
+            char line[1024], *p;
+            guint64 length = 0;
+            if (sock->chunk_crlf) {
+                char crlf[2];
+                rc = socklib_recv_raw(rmi, sock, crlf, 2, timeout);
+                if (rc < 0) return rc;
+                if (rc != 2 || memcmp(crlf, "\r\n", 2)) return SR_ERROR_RECV_FAILED;
+                sock->chunk_crlf = FALSE;
+            }
+            rc = socklib_chunk_line(rmi, sock, line, sizeof(line), timeout);
+            if (rc < 0) return rc;
+            p = line;
+            if (!g_ascii_isxdigit(*p)) return SR_ERROR_RECV_FAILED;
+            while (g_ascii_isxdigit(*p)) {
+                int digit = g_ascii_xdigit_value(*p++);
+                if (length > (G_MAXUINT64 - digit) / 16) return SR_ERROR_RECV_FAILED;
+                length = length * 16 + digit;
+            }
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p && *p != ';') return SR_ERROR_RECV_FAILED;
+            sock->chunk_remaining = length;
+            if (!length) {
+                int trailer_bytes = 0;
+                do {
+                    rc = socklib_chunk_line(rmi, sock, line, sizeof(line), timeout);
+                    if (rc < 0) return rc;
+                    trailer_bytes += strlen(line) + 2;
+                    if (trailer_bytes > 65536) return SR_ERROR_RECV_FAILED;
+                } while (*line);
+                sock->chunk_done = TRUE;
+                break;
+            }
+        }
+        count = sock->chunk_remaining < (guint64)size ? (int)sock->chunk_remaining : size;
+        rc = socklib_recv_raw(rmi, sock, buffer + total, count, timeout);
+        if (rc < 0) return rc;
+        if (rc != count) return SR_ERROR_RECV_FAILED;
+        total += rc;
+        size -= rc;
+        sock->chunk_remaining -= rc;
+        if (!sock->chunk_remaining) sock->chunk_crlf = TRUE;
+    }
+    return total;
 }
 
 int

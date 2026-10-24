@@ -24,10 +24,13 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
     subprocess.run([openssl, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], check=True, capture_output=True)
 
     class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
         def log_message(self, *args):
             pass
 
         def do_GET(self):
+            if self.path.startswith('/http10'):
+                assert self.request_version == 'HTTP/1.0', self.request_version
             if self.path.startswith('/redirect'):
                 self.send_response(302)
                 self.send_header('Location', '/stream?test=1')
@@ -45,14 +48,16 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
                 return
             self.send_response(200)
             self.send_header('Content-Type', 'audio/mpeg')
-            self.send_header('icy-name', 'Test HTTPS')
+            self.send_header('icy-name', 'X' * 3500 if self.path.startswith('/long-headers') else 'Test HTTPS')
+            if self.path.startswith('/long-headers'):
+                self.send_header('Server', 'Y' * 500)
             self.send_header('icy-metaint', '16000')
             self.send_header('icy-br', '256')
             if self.path.startswith('/chunked'):
                 self.send_header('Transfer-Encoding', 'chunked')
             self.end_headers()
             title = "StreamTitle='Žluťoučký - Příliš žluťoučký kůň';".encode('utf-8')
-            title += bytes(-len(title) % 16)
+            title += b' ' * (-len(title) % 16) if self.path.startswith('/long-headers') else bytes(-len(title) % 16)
             offset = 0
             try:
                 for index in range(1000):
@@ -65,7 +70,11 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
                     payload = block + metadata
                     # Split the metadata length byte and text across TLS records.
                     for start in range(0, len(payload), 997):
-                        self.wfile.write(payload[start:start + 997])
+                        part = payload[start:start + 997]
+                        if self.path.startswith('/chunked'):
+                            self.wfile.write(f'{len(part):x};test=fragmented\r\n'.encode() + part + b'\r\n')
+                        else:
+                            self.wfile.write(part)
                     self.wfile.flush()
                     time.sleep(0.01)
             except (OSError, ssl.SSLError):
@@ -176,7 +185,10 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
         record('ecdsa-pfs-tls12', f'https://localhost:{ec_tls.server_port}/stream', trusted_cert=ec_cert, extra=['--tls-info'], tls_expected='ECDHE-ECDSA-AES128-GCM-SHA256')
         ec_context.maximum_version = ssl.TLSVersion.TLSv1_3
         record('ecdsa-tls13', f'https://localhost:{ec_tls.server_port}/stream', trusted_cert=ec_cert, extra=['--tls-info'], tls_expected='ecdsa_secp256r1_sha256')
-        record('chunked-rejected', f'https://localhost:{tls.server_port}/chunked', expected=False)
+        record('chunked-https', f'https://localhost:{tls.server_port}/chunked')
+        record('chunked-http', f'http://localhost:{plain.server_port}/chunked')
+        record('http10', f'http://localhost:{plain.server_port}/http10', extra=['--http10'])
+        record('long-headers-nonterminated-metadata', f'https://localhost:{tls.server_port}/long-headers', extra=['-s'])
         relay_test()
         record('redirect-loop', f'https://localhost:{tls.server_port}/loop', expected=False)
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:

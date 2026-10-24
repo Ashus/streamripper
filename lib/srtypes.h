@@ -228,6 +228,10 @@ typedef struct HSOCKETst
 {
 	SOCKET	s;
 	BOOL	closed;
+        BOOL chunked;
+        BOOL chunk_done;
+        BOOL chunk_crlf;
+        guint64 chunk_remaining;
 #ifdef HAVE_OPENSSL
         void *tls;
 #endif
@@ -462,6 +466,7 @@ typedef struct stream_prefs STREAM_PREFS;
 struct stream_prefs
 {
     BOOL tls_insecure;
+    BOOL http10;
     BOOL tls_info;
     char tls_ca_file[SR_MAX_PATH];
     char label[MAX_URL_LEN];		// logical name for this stream

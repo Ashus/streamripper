@@ -102,6 +102,10 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 
 	debug_printf("http_sc_connect(): calling http_construct_sc_request\n");
 	ret = http_construct_sc_request (url, proxyurl, headbuf, useragent);
+        if (ret == SR_SUCCESS && rmi->prefs->http10) {
+            char *version = strstr(headbuf, " HTTP/1.1\r\n");
+            if (version) version[8] = '0';
+        }
 	if (ret != SR_SUCCESS) {
 	    return ret;
 	}
@@ -840,6 +844,17 @@ http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url,
     if ((ret = http_parse_sc_header(url, headbuf, info)) != SR_SUCCESS) {
 	debug_printf ("http_parse_sc_header failed\n");
 	return ret;
+    }
+
+    {
+        char transfer[128];
+        if (extract_header_value(headbuf, transfer, "Transfer-Encoding:", sizeof(transfer))) {
+            if (g_ascii_strcasecmp(transfer, "chunked")) {
+                fprintf(stderr, "Unsupported HTTP transfer encoding: %s\n", transfer);
+                return SR_ERROR_NOT_SHOUTCAST_STREAM;
+            }
+            sock->chunked = TRUE;
+        }
     }
 
     if (info->content_type == CONTENT_TYPE_PLS) {
