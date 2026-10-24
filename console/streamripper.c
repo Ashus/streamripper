@@ -203,7 +203,7 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    break;
 
 	case RM_STATUS_RIPPING:
-	    if (rmi->track_count < prefs->dropcount) {
+	    if (rmi->callback_skipping) {
 		strcpy(status_str, "skipping...   ");
 	    } else {
 		strcpy(status_str, "ripping...    ");

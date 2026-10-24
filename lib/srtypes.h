@@ -593,6 +593,7 @@ struct RIP_MANAGER_INFOst
 
     /* Callback data */
     u_long callback_filesize;             /* bytes written to current track */
+    BOOL callback_skipping;              /* Initial-track decision for the displayed title */
     char callback_filename[SR_MAX_PATH];  /* not the filename, the trackname */
 
     /* Bytes ripped is stored to send to callback, also used to decide 

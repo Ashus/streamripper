@@ -2,6 +2,7 @@
 from pathlib import Path
 import http.server
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -101,13 +102,25 @@ try:
         old = b'Existing user recording; preserve byte for byte.'
         (incomplete / 'Artist - Song 0.mp3').write_bytes(old)
         (incomplete / 'old-unrelated.mp3').write_bytes(old)
-        files, result = run(dest, 'mp3', '1h', named=True, extra=('-t', '-q', '1'))
+        files, result = run(dest, 'mp3', '15m', named=True,
+                            extra=('-t', '-q', '1', '--metadata-log', '--timeout=8',
+                                   '--user-agent=WinampMPEG/5.0',
+                                   '-D', str(dest / '%q - %A - %T')))
         completed = [path for path in files if path.parent == dest]
         assert len(completed) >= 2, files
         leftovers = [path for path in files if path.parent == incomplete]
         assert len(leftovers) == 2 and all(path.read_bytes() == old for path in leftovers), leftovers
         assert result.stderr.count(b'Discarded incomplete recording') >= 2
+        statuses = re.findall(rb'\[\s*(skipping|ripping)\.\.\.\s*\] Artist - Song (\d+)', result.stdout)
+        assert (b'skipping', b'0') in statuses, result.stdout
+        assert (b'ripping', b'0') not in statuses, statuses
+        assert (b'ripping', b'1') in statuses, statuses
+        assert (b'skipping', b'1') not in statuses, statuses
+        assert any(path.name.endswith('Artist - Song 1.mp3') for path in completed), completed
+        assert not any(b'Discarded incomplete recording' in line and b'Song 1.mp3' in line
+                       for line in result.stderr.splitlines()), result.stderr
         print('PASS: first skipped and final tracks removed; completed tracks, -t backup, and older files preserved')
+        print('PASS: default first-track skipping matches the displayed title; complete second track survives the 15-minute filter')
 
         dest = root / 'duplicates'
         dest.mkdir()

@@ -93,6 +93,7 @@ callback_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti)
     msnprintf (console_string, SR_MAX_PATH, m_S m_(" - ") m_S, 
 	       ti->artist, ti->title);
     rmi->callback_filesize = 0;
+    rmi->callback_skipping = rmi->track_count < rmi->prefs->dropcount;
     string_from_gstring (rmi, rmi->callback_filename, 
 			 SR_MAX_PATH, console_string, 
 			 CODESET_LOCALE);
