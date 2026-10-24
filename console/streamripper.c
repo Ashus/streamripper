@@ -51,7 +51,7 @@ static void print_status (RIP_MANAGER_INFO *rmi);
 static void catch_sig (int code);
 static void parse_arguments (STREAM_PREFS *prefs, int argc, char **argv);
 static void rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data);
-static void parse_extended_options (STREAM_PREFS *prefs, char *rule);
+static void parse_extended_options (STREAM_PREFS *prefs, const char *rule);
 static void verify_splitpoint_rules (STREAM_PREFS *prefs);
 static void print_to_console (char* fmt, ...);
 
@@ -291,47 +291,48 @@ static void
 print_usage (FILE* stream)
 {
     fputs("Usage: streamripper URL [OPTIONS]\n", stream);
+    fputs("Short-option aliases accept --name VALUE or --name=VALUE.\n", stream);
     fputs("\nGeneral:\n", stream);
     print_usage_option(stream, "-h, --help", "Print this help and exit");
     print_usage_option(stream, "-v, --version", "Print the version and exit");
     fputs("\nConnection:\n", stream);
-    print_usage_option(stream, "-c", "Disable automatic reconnection");
+    print_usage_option(stream, "-c, --no-reconnect", "Disable automatic reconnection");
     print_usage_option(stream, "-m, --timeout SECONDS", "Set the stall timeout in SECONDS");
-    print_usage_option(stream, "", "Default: 15; also --timeout=SECONDS");
-    print_usage_option(stream, "-u USERAGENT", "Set the HTTP User-Agent");
-    print_usage_option(stream, "-p URL", "Use an HTTP proxy");
+    print_usage_option(stream, "", "Default: 15 seconds");
+    print_usage_option(stream, "-u, --user-agent USERAGENT", "Set the HTTP User-Agent");
+    print_usage_option(stream, "-p, --proxy URL", "Use an HTTP proxy");
     print_usage_option(stream, "--http10", "Request HTTP/1.0 instead of HTTP/1.1");
 #if !defined (WIN32)
-    print_usage_option(stream, "-I INTERFACE", "Use the specified network interface");
+    print_usage_option(stream, "-I, --interface INTERFACE", "Use the specified network interface");
 #endif
     fputs("\nTLS (certificate verification is enabled by default):\n", stream);
     print_usage_option(stream, "--tls-ca-file=PATH", "Add trusted CAs from a PEM file");
     print_usage_option(stream, "--insecure", "Disable certificate/hostname checks");
     print_usage_option(stream, "--tls-info", "Print TLS and verification details");
     fputs("\nRecording and output:\n", stream);
-    print_usage_option(stream, "-d DIR", "Set the destination directory");
-    print_usage_option(stream, "-D PATTERN", "Set the output path/name pattern");
-    print_usage_option(stream, "-s", "Disable the per-stream subdirectory");
-    print_usage_option(stream, "-q [START]", "Number default names (auto or START)");
-    print_usage_option(stream, "-a [FILE]", "Also record a continuous file and CUE");
+    print_usage_option(stream, "-d, --output-directory DIR", "Set the destination directory");
+    print_usage_option(stream, "-D, --output-pattern PATTERN", "Set the output path/name pattern");
+    print_usage_option(stream, "-s, --no-stream-directory", "Disable the per-stream subdirectory");
+    print_usage_option(stream, "-q, --sequence [START]", "Number default names (auto or START)");
+    print_usage_option(stream, "-a, --continuous-file [FILE]", "Also record a continuous file and CUE");
     print_usage_option(stream, "", "FILE defaults to a timestamped name");
-    print_usage_option(stream, "-A", "Disable individual track files");
+    print_usage_option(stream, "-A, --no-individual-tracks", "Disable individual track files");
     print_usage_option(stream, "--wav", "Decode MP3 to 16-bit PCM WAV");
-    print_usage_option(stream, "-l SECONDS", "Stop after SECONDS (default: forever)");
-    print_usage_option(stream, "-M MEGABYTES", "Stop after receiving MEGABYTES");
+    print_usage_option(stream, "-l, --record-duration SECONDS", "Stop after SECONDS (default: forever)");
+    print_usage_option(stream, "-M, --max-megabytes MEGABYTES", "Stop after receiving MEGABYTES");
     fputs("\nIncomplete files and duplicates:\n", stream);
-    print_usage_option(stream, "-k COUNT", "Leave first COUNT tracks incomplete");
+    print_usage_option(stream, "-k, --skip-initial-tracks COUNT", "Leave first COUNT tracks incomplete");
     print_usage_option(stream, "", "Default: 1 initial track");
     print_usage_option(stream, "-t, --keep-incomplete", "Version existing incomplete files");
-    print_usage_option(stream, "-o POLICY", "Set the complete-file overwrite policy");
+    print_usage_option(stream, "-o, --overwrite POLICY", "Set the complete-file overwrite policy");
     print_usage_option(stream, "", "POLICY: always, never, larger, version");
     print_usage_option(stream, "", "Default: version");
-    print_usage_option(stream, "-T", "Truncate incomplete duplicates");
+    print_usage_option(stream, "-T, --truncate-duplicates", "Truncate incomplete duplicates");
     print_usage_option(stream, "--incomplete-min-duration=TIME", "Discard shorter incomplete files (off)");
     print_usage_option(stream, "", "TIME: seconds, Ns/Nm/Nh; 0 disables");
     fputs("\nMetadata and tags (default: ID3v2.3 on, ID3v1 off):\n", stream);
-    print_usage_option(stream, "-w FILE", "Read metadata parsing/filter rules");
-    print_usage_option(stream, "-E COMMAND", "Fetch metadata via an external command");
+    print_usage_option(stream, "-w, --metadata-rules FILE", "Read metadata parsing/filter rules");
+    print_usage_option(stream, "-E, --external-metadata COMMAND", "Fetch metadata via an external command");
     print_usage_option(stream, "-i, --no-id3", "Disable both ID3v1 and ID3v2 tags");
     print_usage_option(stream, "--with-id3v1", "Enable ID3v1 tags");
     print_usage_option(stream, "--without-id3v2", "Disable ID3v2 tags");
@@ -343,10 +344,10 @@ print_usage (FILE* stream)
     print_usage_option(stream, "--xs-search-window=BEFORE:AFTER", "Set the silence search window");
     print_usage_option(stream, "--xs-silence-length=MSEC", "Set the expected silence length");
     fputs("\nRelay:\n", stream);
-    print_usage_option(stream, "-r [[IP:]PORT]", "Enable the relay (default port: 8000)");
-    print_usage_option(stream, "-R COUNT", "Max relay clients (default: 1; 0=all)");
-    print_usage_option(stream, "-L FILE", "Write a relay playlist");
-    print_usage_option(stream, "-z", "Disable scanning for a free relay port");
+    print_usage_option(stream, "-r, --relay [[IP:]PORT]", "Enable the relay (default port: 8000)");
+    print_usage_option(stream, "-R, --max-relay-clients COUNT", "Max relay clients (default: 1; 0=all)");
+    print_usage_option(stream, "-L, --relay-playlist FILE", "Write a relay playlist");
+    print_usage_option(stream, "-z, --no-port-scan", "Disable scanning for a free relay port");
     fputs("\nText encoding:\n", stream);
     print_usage_option(stream, "--codeset-metadata=NAME", "Set the incoming metadata encoding");
     print_usage_option(stream, "--codeset-id3=NAME", "Set the ID3 text encoding");
@@ -364,6 +365,59 @@ print_usage (FILE* stream)
  * port of it under Win32.. there probably is one, maybe i didn't look 
  * hard enough. 
  */
+/* Map supported long aliases to the same handlers as the original short options. */
+static const char *
+normalize_option(char *input, char **argument)
+{
+    static const struct {
+        const char *name;
+        char short_option[3];
+    } aliases[] = {
+        {"help", "-h"},
+        {"version", "-v"},
+        {"no-reconnect", "-c"},
+        {"timeout", "-m"},
+        {"user-agent", "-u"},
+        {"proxy", "-p"},
+        {"interface", "-I"},
+        {"output-directory", "-d"},
+        {"output-pattern", "-D"},
+        {"no-stream-directory", "-s"},
+        {"sequence", "-q"},
+        {"continuous-file", "-a"},
+        {"no-individual-tracks", "-A"},
+        {"record-duration", "-l"},
+        {"max-megabytes", "-M"},
+        {"skip-initial-tracks", "-k"},
+        {"keep-incomplete", "-t"},
+        {"overwrite", "-o"},
+        {"truncate-duplicates", "-T"},
+        {"metadata-rules", "-w"},
+        {"external-metadata", "-E"},
+        {"no-id3", "-i"},
+        {"relay", "-r"},
+        {"max-relay-clients", "-R"},
+        {"relay-playlist", "-L"},
+        {"no-port-scan", "-z"},
+    };
+    size_t i;
+    if (input[0] != '-' || input[1] != '-') return input;
+    for (i = 0; i < G_N_ELEMENTS(aliases); i++) {
+        size_t length = strlen(aliases[i].name);
+        if (strncmp(input + 2, aliases[i].name, length) ||
+            (input[length + 2] && input[length + 2] != '=')) continue;
+        if (input[length + 2] == '=') {
+            if (!strchr("adDEIklLmMopqRruw", aliases[i].short_option[1])) {
+                fprintf(stderr, "option --%s does not take an argument\n", aliases[i].name);
+                exit(EXIT_FAILURE);
+            }
+            *argument = input + length + 3;
+        }
+        return aliases[i].short_option;
+    }
+    return input;
+}
+
 static u_long
 parse_timeout(const char *value)
 {
@@ -383,7 +437,8 @@ parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 {
     int i;
     char *c;
-    char *option;
+    const char *option;
+    char *argument;
 
     if (argc < 2) {
 	print_usage (stdout);
@@ -403,29 +458,28 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
 	if (argv[i][0] != '-')
 	    continue;
 
-        /* Preserve ownership of the original Windows UTF-8 argument vector. */
-        option = argv[i];
-        if (!strcmp(option, "--help")) option = "-h";
-        else if (!strcmp(option, "--timeout")) option = "-m";
-        else if (!strcmp(option, "--keep-incomplete")) option = "-t";
-        else if (!strcmp(option, "--no-id3")) option = "-i";
-	c = strchr ("dDEfIklLmMopRuw", option[1]);
-        if (c != NULL) {
-            if ((i == (argc-1)) || (argv[i+1][0] == '-')) {
-		fprintf(stderr, "option %s requires an argument\n", argv[i]);
-		exit(1);
-	    }
-	}
+        /* Keep argv ownership intact; attached values point into its strings. */
+        argument = NULL;
+        option = normalize_option(argv[i], &argument);
+        c = strchr("dDEfIklLmMopRuw", option[1]);
+        if (c && !argument) {
+            if (i == argc - 1 || argv[i + 1][0] == '-') {
+                fprintf(stderr, "option %s requires an argument\n", argv[i]);
+                exit(EXIT_FAILURE);
+            }
+            argument = argv[++i];
+        } else if (!argument && strchr("aqr", option[1]) &&
+                   i + 1 < argc && argv[i + 1][0] != '-') {
+            argument = argv[++i];
+        }
 	switch (option[1])
 	{
 	case 'a':
 	    /* Create single file output + cue sheet */
 	    OPT_FLAG_SET (prefs->flags, OPT_SINGLE_FILE_OUTPUT, 1);
 	    prefs->showfile_pattern[0] = 0;
-	    if (i == (argc-1) || argv[i+1][0] == '-')
-		break;
-	    i++;
-g_strlcpy (prefs->showfile_pattern, argv[i], SR_MAX_PATH);
+	    if (!argument) break;
+g_strlcpy (prefs->showfile_pattern, argument, SR_MAX_PATH);
 	    break;
 	case 'A':
 	    OPT_FLAG_SET (prefs->flags, OPT_INDIVIDUAL_TRACKS, 0);
@@ -434,20 +488,16 @@ g_strlcpy (prefs->showfile_pattern, argv[i], SR_MAX_PATH);
 	    OPT_FLAG_SET (prefs->flags, OPT_AUTO_RECONNECT, 0);
 	    break;
 	case 'd':
-	    i++;
-g_strlcpy(prefs->output_directory, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->output_directory, argument, SR_MAX_PATH);
 	    break;
 	case 'D':
-	    i++;
-g_strlcpy(prefs->output_pattern, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->output_pattern, argument, SR_MAX_PATH);
 	    break;
 	case 'E':
 	    OPT_FLAG_SET (prefs->flags, OPT_EXTERNAL_CMD, 1);
-	    i++;
-g_strlcpy(prefs->ext_cmd, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->ext_cmd, argument, SR_MAX_PATH);
 	    break;
 	case 'f':
-	    i++;
 	    fprintf (stderr, "Error: -f dropstring option is obsolete. "
 		     "Please use -w parse_rules instead.\n");
 	    exit (1);
@@ -461,73 +511,59 @@ g_strlcpy(prefs->ext_cmd, argv[i], SR_MAX_PATH);
 	    OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 0);
 	    break;
 	case 'I':
-	    i++;
-g_strlcpy(prefs->if_name, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->if_name, argument, SR_MAX_PATH);
 	    break;
 	case 'k':
-	    i++;
-	    prefs->dropcount = atoi(argv[i]);
+	    prefs->dropcount = atoi(argument);
 	    break;
 	case 'l':
-	    i++;
 	    time(&m_stop_time);
-	    m_stop_time += atoi(argv[i]);
+	    m_stop_time += atoi(argument);
 	    break;
 	case 'L':
-	    i++;
-g_strlcpy(prefs->pls_file, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->pls_file, argument, SR_MAX_PATH);
 	    break;
 	case 'm':
-	    i++;
-	    prefs->timeout = parse_timeout(argv[i]);
+	    prefs->timeout = parse_timeout(argument);
 	    break;
  	case 'M':
- 	    i++;
- 	    prefs->maxMB_rip_size = atoi(argv[i]);
+            prefs->maxMB_rip_size = atoi(argument);
 	    OPT_FLAG_SET(prefs->flags, OPT_CHECK_MAX_BYTES, 1);
  	    break;
 	case 'o':
-	    i++;
-	    prefs->overwrite = string_to_overwrite_opt (argv[i]);
+	    prefs->overwrite = string_to_overwrite_opt (argument);
 	    if (prefs->overwrite == OVERWRITE_UNKNOWN) {
 		fprintf (stderr, "Error: -o option requires an argument\n");
 		exit (1);
 	    }
 	    break;
 	case 'p':
-	    i++;
-g_strlcpy(prefs->proxyurl, argv[i], MAX_URL_LEN);
+g_strlcpy(prefs->proxyurl, argument, MAX_URL_LEN);
 	    break;
 	case 'P':
-	    i++;
 	    fprintf (stderr, "Error: -P prefix option is obsolete. "
 		     "Please use -D pattern instead.\n");
 	    exit (1);
 	case 'q':
 	    OPT_FLAG_SET(prefs->flags, OPT_COUNT_FILES, 1);
 	    prefs->count_start = -1;     /* -1 means auto-detect */
-	    if (i == (argc-1) || argv[i+1][0] == '-')
-		break;
-	    i++;
-	    prefs->count_start = atoi(argv[i]);
+	    if (!argument) break;
+	    prefs->count_start = atoi(argument);
 	    break;
 	case 'r':
 	    OPT_FLAG_SET(prefs->flags, OPT_MAKE_RELAY, 1);
-	    if (i == (argc-1) || argv[i+1][0] == '-')
-		break;
-	    i++;
-	    c = strstr(argv[i], ":");
+	    if (!argument) break;
+	    c = strchr(argument, ':');
 	    if (NULL == c) {
-	    	prefs->relay_port = atoi(argv[i]);
+                prefs->relay_port = atoi(argument);
 	    } else {
 	    	*c = '\0';
-g_strlcpy(prefs->relay_ip, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->relay_ip, argument, SR_MAX_PATH);
 		prefs->relay_port = atoi(++c);
  	    }
 	    break;
 	case 'R':
-	    i++;
-	    prefs->max_connections = atoi(argv[i]);
+	    prefs->max_connections = atoi(argument);
 	    break;
 	case 's':
 	    OPT_FLAG_SET(prefs->flags, OPT_SEPARATE_DIRS, 0);
@@ -539,15 +575,13 @@ g_strlcpy(prefs->relay_ip, argv[i], SR_MAX_PATH);
 	    OPT_FLAG_SET(prefs->flags, OPT_TRUNCATE_DUPS, 1);
 	    break;
 	case 'u':
-	    i++;
-g_strlcpy(prefs->useragent, argv[i], MAX_USERAGENT_STR);
+g_strlcpy(prefs->useragent, argument, MAX_USERAGENT_STR);
 	    break;
 	case 'v':
 	    printf("Streamripper %s\n", SRVERSION);
 	    exit(0);
 	case 'w':
-	    i++;
-g_strlcpy(prefs->rules_file, argv[i], SR_MAX_PATH);
+g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
 	    break;
 	case 'z':
 	    OPT_FLAG_SET(prefs->flags, OPT_SEARCH_PORTS, 0);
@@ -574,7 +608,7 @@ g_strlcpy(prefs->rules_file, argv[i], SR_MAX_PATH);
 }
 
 static void
-parse_extended_options (STREAM_PREFS* prefs, char* rule)
+parse_extended_options (STREAM_PREFS* prefs, const char* rule)
 {
     int x,y;
 
