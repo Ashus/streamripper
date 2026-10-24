@@ -282,61 +282,80 @@ rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data)
 /* Usage should be printed to stdout when it is not an error 
    http://www.gnu.org/prep/standards/standards.html */
 static void
+print_usage_option(FILE *stream, const char *option, const char *description)
+{
+    fprintf(stream, "  %-38s  %s\n", option, description);
+}
+
+static void
 print_usage (FILE* stream)
 {
-    fprintf(stream, "Usage: streamripper URL [OPTIONS]\n");
-    fprintf(stream, "Opts: -h             - Print this listing\n");
-    fprintf(stream, "      -v             - Print version info and quit\n");
-    fprintf(stream, "      -a [file]      - Rip to single file, default name is timestamped\n");
-    fprintf(stream, "      -A             - Don't write individual tracks\n");
-    fprintf(stream, "      -d dir         - The destination directory\n");
-    fprintf(stream, "      -D pattern     - Write files using specified pattern\n");
-    fprintf(stream, "      -s             - Don't create a directory for each stream\n");
-    fprintf(stream, "      -r [[ip:]port] - Create relay server on base ip:port, default port 8000\n");
-    fprintf(stream, "      -R #connect    - Max connections to relay, default 1, -R 0 is no limit\n");
-    fprintf(stream, "      -L file        - Create a relay playlist file\n");
-    fprintf(stream, "      -z             - Don't scan for free ports if base port is not avail\n");
-    fprintf(stream, "      -p url         - Use HTTP proxy server at <url>\n");
-    fprintf(stream, "      -o (always|never|larger|version)    - When to write tracks in complete\n");
-    fprintf(stream, "      -t             - Don't overwrite tracks in incomplete\n");
-    fprintf(stream, "      -c             - Don't auto-reconnect\n");
-    fprintf(stream, "      -l seconds     - Number of seconds to run, otherwise runs forever\n");
-    fprintf(stream, "      -M megabytes   - Stop ripping after this many megabytes\n");
-    fprintf(stream, "      -q [start]     - Add sequence number to output file\n");
-    fprintf(stream, "      -u useragent   - Use a different UserAgent than \"Streamripper\"\n");
-    fprintf(stream, "      -w rulefile    - Parse metadata using rules in file.\n");
-    fprintf(stream, "      -m timeout     - Number of seconds before force-closing stalled conn\n");
-    fprintf(stream, "      -k count       - Leave <count> tracks in incomplete\n");
+    fputs("Usage: streamripper URL [OPTIONS]\n", stream);
+    fputs("\nGeneral:\n", stream);
+    print_usage_option(stream, "-h, --help", "Print this help and exit");
+    print_usage_option(stream, "-v, --version", "Print the version and exit");
+    fputs("\nConnection:\n", stream);
+    print_usage_option(stream, "-c", "Disable automatic reconnection");
+    print_usage_option(stream, "-m, --timeout SECONDS", "Set the stall timeout in SECONDS");
+    print_usage_option(stream, "", "Default: 15; also --timeout=SECONDS");
+    print_usage_option(stream, "-u USERAGENT", "Set the HTTP User-Agent");
+    print_usage_option(stream, "-p URL", "Use an HTTP proxy");
+    print_usage_option(stream, "--http10", "Request HTTP/1.0 instead of HTTP/1.1");
 #if !defined (WIN32)
-    fprintf(stream, "      -I interface   - Rip from specified interface (e.g. eth0)\n");
+    print_usage_option(stream, "-I INTERFACE", "Use the specified network interface");
 #endif
-    fprintf(stream, "      -T             - Truncate duplicated tracks in incomplete\n");
-    fprintf(stream, "      --incomplete-min-duration=N[s|m|h] - Discard shorter incomplete files (0=off)\n");
-    fprintf(stream, "      -E command     - Run external command to fetch metadata\n");
-    fprintf(stream, "      --quiet        - Don't print ripping status to console\n");
-    fprintf(stream, "      --stderr       - Print ripping status to stderr (old behavior)\n");
-    fprintf(stream, "      --debug        - Save debugging trace\n");
-    fprintf(stream, "      --insecure     - Disable TLS certificate and hostname verification\n");
-    fprintf(stream, "      --http10       - Use HTTP/1.0 for compatibility with old servers\n");
-    fprintf(stream, "      --wav          - Decode MP3 recordings to 16-bit PCM WAV\n");
-    fprintf(stream, "      --tls-ca-file=path - Add trusted CAs from a PEM file\n");
-    fprintf(stream, "      --tls-info     - Print TLS version, cipher, group, and signature\n");
-    fprintf(stream, "ID3 opts (mp3/aac/nsv):  [The default behavior is adding ID3V2.3 only]\n");
-    fprintf(stream, "      -i                           - Don't add any ID3 tags to output file\n");
-    fprintf(stream, "      --with-id3v1                 - Add ID3V1 tags to output file\n");
-    fprintf(stream, "      --without-id3v2              - Don't add ID3V2 tags to output file\n");
-    fprintf(stream, "Splitpoint opts (mp3 only):\n");
-    fprintf(stream, "      --xs-none                    - Don't search for silence\n");
-    fprintf(stream, "      --xs-offset=num              - Shift relative to metadata (msec)\n");
-    fprintf(stream, "      --xs-padding=num:num         - Add extra to prev:next track (msec)\n");
-    fprintf(stream, "      --xs-search-window=num:num   - Search window relative to metadata (msec)\n");
-    fprintf(stream, "      --xs-silence-length=num      - Expected length of silence (msec)\n");
-    fprintf(stream, "      --xs2                        - Use new algorithm for silence detection\n");
-    fprintf(stream, "Codeset opts:\n");
-    fprintf(stream, "      --codeset-filesys=codeset    - Specify codeset for the file system\n");
-    fprintf(stream, "      --codeset-id3=codeset        - Specify codeset for id3 tags\n");
-    fprintf(stream, "      --codeset-metadata=codeset   - Specify codeset for metadata\n");
-    fprintf(stream, "      --codeset-relay=codeset      - Specify codeset for the relay stream\n");
+    fputs("\nTLS (certificate verification is enabled by default):\n", stream);
+    print_usage_option(stream, "--tls-ca-file=PATH", "Add trusted CAs from a PEM file");
+    print_usage_option(stream, "--insecure", "Disable certificate/hostname checks");
+    print_usage_option(stream, "--tls-info", "Print TLS and verification details");
+    fputs("\nRecording and output:\n", stream);
+    print_usage_option(stream, "-d DIR", "Set the destination directory");
+    print_usage_option(stream, "-D PATTERN", "Set the output path/name pattern");
+    print_usage_option(stream, "-s", "Disable the per-stream subdirectory");
+    print_usage_option(stream, "-q [START]", "Number default names (auto or START)");
+    print_usage_option(stream, "-a [FILE]", "Also record a continuous file and CUE");
+    print_usage_option(stream, "", "FILE defaults to a timestamped name");
+    print_usage_option(stream, "-A", "Disable individual track files");
+    print_usage_option(stream, "--wav", "Decode MP3 to 16-bit PCM WAV");
+    print_usage_option(stream, "-l SECONDS", "Stop after SECONDS (default: forever)");
+    print_usage_option(stream, "-M MEGABYTES", "Stop after receiving MEGABYTES");
+    fputs("\nIncomplete files and duplicates:\n", stream);
+    print_usage_option(stream, "-k COUNT", "Leave first COUNT tracks incomplete");
+    print_usage_option(stream, "", "Default: 1 initial track");
+    print_usage_option(stream, "-t, --keep-incomplete", "Version existing incomplete files");
+    print_usage_option(stream, "-o POLICY", "Set the complete-file overwrite policy");
+    print_usage_option(stream, "", "POLICY: always, never, larger, version");
+    print_usage_option(stream, "", "Default: version");
+    print_usage_option(stream, "-T", "Truncate incomplete duplicates");
+    print_usage_option(stream, "--incomplete-min-duration=TIME", "Discard shorter incomplete files (off)");
+    print_usage_option(stream, "", "TIME: seconds, Ns/Nm/Nh; 0 disables");
+    fputs("\nMetadata and tags (default: ID3v2.3 on, ID3v1 off):\n", stream);
+    print_usage_option(stream, "-w FILE", "Read metadata parsing/filter rules");
+    print_usage_option(stream, "-E COMMAND", "Fetch metadata via an external command");
+    print_usage_option(stream, "-i, --no-id3", "Disable both ID3v1 and ID3v2 tags");
+    print_usage_option(stream, "--with-id3v1", "Enable ID3v1 tags");
+    print_usage_option(stream, "--without-id3v2", "Disable ID3v2 tags");
+    fputs("\nMP3 split points (times are in milliseconds):\n", stream);
+    print_usage_option(stream, "--xs-none", "Disable silence searching");
+    print_usage_option(stream, "--xs2", "Use the alternative silence detector");
+    print_usage_option(stream, "--xs-offset=MSEC", "Shift the split relative to metadata");
+    print_usage_option(stream, "--xs-padding=PREV:NEXT", "Pad previous/next recordings");
+    print_usage_option(stream, "--xs-search-window=BEFORE:AFTER", "Set the silence search window");
+    print_usage_option(stream, "--xs-silence-length=MSEC", "Set the expected silence length");
+    fputs("\nRelay:\n", stream);
+    print_usage_option(stream, "-r [[IP:]PORT]", "Enable the relay (default port: 8000)");
+    print_usage_option(stream, "-R COUNT", "Max relay clients (default: 1; 0=all)");
+    print_usage_option(stream, "-L FILE", "Write a relay playlist");
+    print_usage_option(stream, "-z", "Disable scanning for a free relay port");
+    fputs("\nText encoding:\n", stream);
+    print_usage_option(stream, "--codeset-metadata=NAME", "Set the incoming metadata encoding");
+    print_usage_option(stream, "--codeset-id3=NAME", "Set the ID3 text encoding");
+    print_usage_option(stream, "--codeset-filesys=NAME", "Set the file-system encoding");
+    print_usage_option(stream, "--codeset-relay=NAME", "Set the relay metadata encoding");
+    fputs("\nLogging:\n", stream);
+    print_usage_option(stream, "--quiet", "Hide recording status");
+    print_usage_option(stream, "--stderr", "Write recording status to stderr");
+    print_usage_option(stream, "--debug", "Write a debugging trace");
 }
 
 /* 
@@ -345,11 +364,26 @@ print_usage (FILE* stream)
  * port of it under Win32.. there probably is one, maybe i didn't look 
  * hard enough. 
  */
+static u_long
+parse_timeout(const char *value)
+{
+    char *end;
+    guint64 timeout;
+    errno = 0;
+    timeout = g_ascii_strtoull(value, &end, 10);
+    if (!g_ascii_isdigit(*value) || *end || errno == ERANGE || timeout > G_MAXINT) {
+        fprintf(stderr, "Invalid timeout; use integer seconds from 0 to %d.\n", G_MAXINT);
+        exit(EXIT_FAILURE);
+    }
+    return (u_long)timeout;
+}
+
 static void
 parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
 {
     int i;
     char *c;
+    char *option;
 
     if (argc < 2) {
 	print_usage (stdout);
@@ -369,14 +403,20 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
 	if (argv[i][0] != '-')
 	    continue;
 
-	c = strchr ("dDEfIklLmMopRuw", argv[i][1]);
+        /* Preserve ownership of the original Windows UTF-8 argument vector. */
+        option = argv[i];
+        if (!strcmp(option, "--help")) option = "-h";
+        else if (!strcmp(option, "--timeout")) option = "-m";
+        else if (!strcmp(option, "--keep-incomplete")) option = "-t";
+        else if (!strcmp(option, "--no-id3")) option = "-i";
+	c = strchr ("dDEfIklLmMopRuw", option[1]);
         if (c != NULL) {
             if ((i == (argc-1)) || (argv[i+1][0] == '-')) {
 		fprintf(stderr, "option %s requires an argument\n", argv[i]);
 		exit(1);
 	    }
 	}
-	switch (argv[i][1])
+	switch (option[1])
 	{
 	case 'a':
 	    /* Create single file output + cue sheet */
@@ -439,7 +479,7 @@ g_strlcpy(prefs->pls_file, argv[i], SR_MAX_PATH);
 	    break;
 	case 'm':
 	    i++;
-	    prefs->timeout = atoi(argv[i]);
+	    prefs->timeout = parse_timeout(argv[i]);
 	    break;
  	case 'M':
  	    i++;
@@ -514,7 +554,7 @@ g_strlcpy(prefs->rules_file, argv[i], SR_MAX_PATH);
 	    prefs->max_port = prefs->relay_port+1000;
 	    break;
 	case '-':
-	    parse_extended_options (prefs, &argv[i][2]);
+	    parse_extended_options (prefs, &option[2]);
 	    break;
 	}
     }
@@ -559,6 +599,10 @@ parse_extended_options (STREAM_PREFS* prefs, char* rule)
     }
 
     /* Splitpoint options */
+    if (g_str_has_prefix(rule, "timeout=")) {
+        prefs->timeout = parse_timeout(rule + strlen("timeout="));
+        return;
+    }
     if (g_str_has_prefix(rule, "incomplete-min-duration=")) {
         const char *value = rule + strlen("incomplete-min-duration=");
         char *end;

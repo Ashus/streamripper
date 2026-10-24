@@ -6,6 +6,8 @@ set "PATH=%SR_TOOLCHAIN%\bin;%PATH%"
 pushd "%~dp0.."
 ctest --test-dir build --output-on-failure
 if errorlevel 1 goto failed
+python testing\cli_options.py
+if errorlevel 1 goto failed
 python testing\package_smoke.py "%SR_TOOLCHAIN%"
 if errorlevel 1 goto failed
 python testing\sequence_number.py
