@@ -1,5 +1,6 @@
 /* Recording directory ownership, GPL-2.0-or-later. */
 #include "recording_lock.h"
+#include "console_output.h"
 #include "sr_compat.h"
 #include <glib/gstdio.h>
 #include <errno.h>
@@ -45,7 +46,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
         }
     }
     if (g_mkdir_with_parents(incomplete_directory, 0777)) {
-        fprintf(stderr, "Unable to create recording lock directory: %s (%s)\n",
+        sr_console_printf(stderr, "Unable to create recording lock directory: %s (%s)\n",
                 incomplete_directory, g_strerror(errno));
         g_free(path);
         return FALSE;
@@ -62,7 +63,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
     lock->file = g_open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0666);
 #endif
     if (lock->file == INVALID_FHANDLE) {
-        fprintf(stderr, "Unable to open recording lock: %s\n", path);
+        sr_console_printf(stderr, "Unable to open recording lock: %s\n", path);
         g_free(lock->path);
         g_free(lock);
         return FALSE;
@@ -75,7 +76,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
     acquired = LockFileEx(lock->file, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
                           0, 1, 0, &region);
     if (!acquired && GetLastError() != ERROR_LOCK_VIOLATION) {
-        fprintf(stderr, "Unable to lock recording directory: %s (Windows error %lu)\n",
+        sr_console_printf(stderr, "Unable to lock recording directory: %s (Windows error %lu)\n",
                 path, (unsigned long)GetLastError());
         close_lock(lock);
         return FALSE;
@@ -86,7 +87,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
     do { result = flock(lock->file, LOCK_EX | LOCK_NB); } while (result && errno == EINTR);
     acquired = result == 0;
     if (!acquired && errno != EWOULDBLOCK && errno != EAGAIN) {
-        fprintf(stderr, "Unable to lock recording directory: %s (%s)\n", path, g_strerror(errno));
+        sr_console_printf(stderr, "Unable to lock recording directory: %s (%s)\n", path, g_strerror(errno));
         close_lock(lock);
         return FALSE;
     }
@@ -100,7 +101,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
         for (const char *p = pid; *p; p++) {
             if (!g_ascii_isdigit(*p)) { pid[0] = 0; break; }
         }
-        fprintf(stderr, "Output directory is already in use (PID %s): %s\n",
+        sr_console_printf(stderr, "Output directory is already in use (PID %s): %s\n",
                 pid[0] ? pid : "unknown", path);
         close_lock(lock);
         return FALSE;
@@ -115,7 +116,7 @@ gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory)
     if (acquired) acquired = write(lock->file, pid, strlen(pid)) == (ssize_t)strlen(pid);
 #endif
     if (!acquired) {
-        fprintf(stderr, "Unable to write recording lock PID: %s\n", path);
+        sr_console_printf(stderr, "Unable to write recording lock PID: %s\n", path);
         close_lock(lock);
         return FALSE;
     }

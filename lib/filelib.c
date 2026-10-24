@@ -21,6 +21,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include "sr_compat.h"
+#include "console_output.h"
 #include "filelib.h"
 #include "framed_audio.h"
 #include "ripstream_wav.h"
@@ -207,7 +208,7 @@ filelib_init (RIP_MANAGER_INFO* rmi,
 	fli->m_extension = m_(".aac");
 	break;
     default:
-	fprintf (stderr, "Error (wrong suggested content type: %d)\n", 
+	sr_console_printf(stderr, "Error (wrong suggested content type: %d)\n",
 		 content_type);
 	return SR_ERROR_PROGRAM_ERROR;
     }
@@ -329,7 +330,7 @@ filelib_log_metadata(RIP_MANAGER_INFO *rmi, const mchar *title)
         if (fwrite(line->str, 1, line->len, log) != line->len) failed = TRUE;
         if (fclose(log)) failed = TRUE;
     }
-    if (failed) fprintf(stderr, "Could not append ICY metadata to %s\n", path);
+    if (failed) sr_console_printf(stderr, "Could not append ICY metadata to %s\n", path);
     g_free(path);
     g_string_free(line, TRUE);
     g_free(timestamp);
@@ -552,7 +553,7 @@ void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer)
     if (!minimum || !writer->m_is_incomplete || writer->m_cleanup_blocked ||
         !writer->m_incomplete_filename[0]) return;
     if (!writer->m_duration_known) {
-        fprintf(stderr, "Keeping incomplete recording with unknown duration: %s\n",
+        sr_console_printf(stderr, "Keeping incomplete recording with unknown duration: %s\n",
                 writer->m_incomplete_filename);
         return;
     }
@@ -560,11 +561,11 @@ void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer)
         char path[SR_MAX_PATH];
         string_from_gstring(rmi, path, sizeof(path), writer->m_incomplete_filename, CODESET_FILESYS);
         if (g_unlink(path) != 0) {
-            fprintf(stderr, "Unable to remove incomplete recording: %s\n", path);
+            sr_console_printf(stderr, "Unable to remove incomplete recording: %s\n", path);
             return;
         }
         gchar *basename = g_path_get_basename(path);
-        fprintf(stderr, "Discarded incomplete recording (%" G_GUINT64_FORMAT
+        sr_console_printf(stderr, "Discarded incomplete recording (%" G_GUINT64_FORMAT
                 " s < %" G_GUINT64_FORMAT " s): %s\n",
                 writer->m_duration_ms / 1000, minimum / 1000, basename);
         g_free(basename);
@@ -619,7 +620,7 @@ filelib_shutdown (RIP_MANAGER_INFO* rmi)
         for (node = rmi->cbuf3.write_list->head; node; node = node->next) {
             Writer *writer = node->data;
             if (writer->m_started && filelib_close(rmi, writer) != SR_SUCCESS)
-                fprintf(stderr, "Unable to finalize incomplete audio output.\n");
+                sr_console_printf(stderr, "Unable to finalize incomplete audio output.\n");
             if (writer->m_started) filelib_cleanup_incomplete(rmi, writer);
         }
     }
@@ -990,7 +991,7 @@ close_files (RIP_MANAGER_INFO* rmi)
 {
     FILELIB_INFO* fli = &rmi->filelib_info;
     if (wav_output_finish(&fli->m_show_wav) != SR_SUCCESS)
-        fprintf(stderr, "Unable to finalize WAV show output.\n");
+        sr_console_printf(stderr, "Unable to finalize WAV show output.\n");
     audio_file_release(fli->m_show_file, &fli->m_show_allocation);
     /* GCS FIX: Need to close writers */
     //    close_file (&fli->m_file);

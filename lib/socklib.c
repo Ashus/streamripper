@@ -43,6 +43,7 @@
 #endif
 
 #include "srtypes.h"
+#include "console_output.h"
 #include "socklib.h"
 #include "threadlib.h"
 #include "sr_compat.h"
@@ -343,11 +344,11 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     SSL_CTX_set_verify(ctx, prefs->tls_insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
     SSL_CTX_set_default_verify_paths(ctx);
     if (prefs->tls_ca_file[0] && !SSL_CTX_load_verify_locations(ctx, prefs->tls_ca_file, NULL)) {
-        fprintf(stderr, "Unable to load CA file: %s\n", prefs->tls_ca_file);
+        sr_console_printf(stderr, "Unable to load CA file: %s\n", prefs->tls_ca_file);
         SSL_CTX_free(ctx);
         return SR_ERROR_CONNECT_FAILED;
     }
-    if (prefs->tls_insecure) fprintf(stderr, "Warning: --insecure disables certificate and hostname verification.\n");
+    if (prefs->tls_insecure) sr_console_printf(stderr, "Warning: --insecure disables certificate and hostname verification.\n");
 #ifdef WIN32
     {
         HCERTSTORE roots = CertOpenSystemStoreA(0, "ROOT");
@@ -402,7 +403,7 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
         int nid;
         if (SSL_get_peer_signature_type_nid(ssl, &nid)) signature = OBJ_nid2sn(nid);
 #endif
-        fprintf(stdout, "TLS%s: %s; cipher: %s; group: %s; signature: %s; verification: %s\n",
+        sr_console_printf(stdout, "TLS%s: %s; cipher: %s; group: %s; signature: %s; verification: %s\n",
                 proxy ? " proxy" : "", SSL_get_version(ssl), SSL_get_cipher(ssl), group ? group : "unknown",
                 signature ? signature : "unknown", prefs->tls_insecure ? "disabled" : "enabled");
         fflush(stdout);
@@ -410,7 +411,7 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     }
     return SR_SUCCESS;
 failed:
-    fprintf(stderr, "TLS%s error for %s: %s (%s)\n", proxy ? " proxy" : "", host,
+    sr_console_printf(stderr, "TLS%s error for %s: %s (%s)\n", proxy ? " proxy" : "", host,
             ERR_peek_last_error() ? ERR_reason_error_string(ERR_peek_last_error()) : "connection closed",
             X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
     socklib_free_tls(socket_handle);

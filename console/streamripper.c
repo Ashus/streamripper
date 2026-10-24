@@ -42,6 +42,7 @@
 #include "mchar.h"
 #include "filelib.h"
 #include "debug.h"
+#include "console_output.h"
 
 /*****************************************************************************
  * Private functions
@@ -62,7 +63,7 @@ static char m_buffer_chars[] = {'\\', '|', '/', '-', '*'}; /* for formating */
 //static RIP_MANAGER_INFO 	m_curinfo; /* from the rip_manager callback */
 static BOOL			m_started = FALSE;
 static BOOL			m_alldone = FALSE;
-static BOOL			m_got_sig = FALSE;
+static volatile sig_atomic_t m_got_sig = FALSE;
 static BOOL			m_dont_print = FALSE;
 static BOOL			m_print_stderr = FALSE;
 static int                      m_exit_code = EXIT_SUCCESS;
@@ -90,7 +91,6 @@ main (int argc, char *argv[])
 #ifdef SR_MODERN_WINDOWS
     argv = g_win32_get_command_line();
     argc = g_strv_length(argv);
-    SetConsoleOutputCP(CP_UTF8);
 #endif
     sr_set_locale ();
 
@@ -105,7 +105,7 @@ main (int argc, char *argv[])
 
     /* Launch the ripping thread */
     if ((ret = rip_manager_start (&rmi, &prefs, rip_callback)) != SR_SUCCESS) {
-	fprintf(stderr, "Couldn't connect to %s\n", prefs.url);
+	sr_console_printf(stderr, "Couldn't connect to %s\n", prefs.url);
 	exit(1);
     }
 
@@ -123,7 +123,7 @@ main (int argc, char *argv[])
 	}	
     }
 
-    print_to_console ("shutting down\n");
+    print_to_console (m_got_sig ? "\nshutting down\n" : "shutting down\n");
 
     rip_manager_stop (rmi);
     rip_manager_cleanup ();
@@ -139,7 +139,6 @@ main (int argc, char *argv[])
 void
 catch_sig(int code)
 {
-    print_to_console ("\n");
     if (!m_started)
         exit(2);
     m_got_sig = TRUE;
@@ -155,13 +154,7 @@ print_to_console (char* fmt, ...)
     if (!m_dont_print) {
 	va_start (argptr, fmt);
 
-	if (m_print_stderr) {
-	    vfprintf (stderr, fmt, argptr);
-	    fflush (stderr);
-	} else {
-	    vfprintf (stdout, fmt, argptr);
-	    fflush (stdout);
-	}
+	sr_console_vprintf(m_print_stderr ? stderr : stdout, fmt, argptr);
 
 	va_end (argptr);
     }
@@ -179,6 +172,8 @@ print_status (RIP_MANAGER_INFO *rmi)
     STREAM_PREFS *prefs = rmi->prefs;
     char status_str[128];
     char filesize_str[64];
+    int title_bytes = (int)(g_utf8_offset_to_pointer(rmi->callback_filename,
+        MIN(g_utf8_strlen(rmi->callback_filename, -1), 50)) - rmi->callback_filename);
     static int buffering_tick = 0;
     static BOOL printed_fullinfo = FALSE;
 
@@ -197,8 +192,9 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    sprintf(status_str,"buffering - %c ",
 		    m_buffer_chars[buffering_tick]);
 
-	    print_to_console ("[%14s] %.50s\r",
+	    print_to_console ("[%14s] %.*s\r",
 			      status_str,
+			      title_bytes,
 			      rmi->callback_filename);
 	    break;
 
@@ -209,8 +205,9 @@ print_status (RIP_MANAGER_INFO *rmi)
 		strcpy(status_str, "ripping...    ");
 	    }
 	    format_byte_size(filesize_str, rmi->callback_filesize);
-	    print_to_console ("[%14s] %.50s [%7s]\r",
+	    print_to_console ("[%14s] %.*s [%7s]\r",
 			      status_str,
+			      title_bytes,
 			      rmi->callback_filename,
 			      filesize_str);
 	    break;
@@ -270,7 +267,7 @@ rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data)
     case RM_ERROR:
 	err = (ERROR_INFO*)data;
         if (err->error_code == SR_ERROR_OUTPUT_DIRECTORY_LOCKED) m_exit_code = EXIT_FAILURE;
-	fprintf(stderr, "\nerror %d [%s]\n", err->error_code, err->error_str);
+	sr_console_printf(stderr, "\nerror %d [%s]\n", err->error_code, err->error_str);
 	m_alldone = TRUE;
 	break;
     case RM_DONE:
@@ -291,7 +288,7 @@ rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data)
 static void
 print_usage_option(FILE *stream, const char *option, const char *description)
 {
-    fprintf(stream, "  %-38s  %s\n", option, description);
+    sr_console_printf(stream, "  %-38s  %s\n", option, description);
 }
 
 static void
@@ -424,7 +421,7 @@ normalize_option(char *input, char **argument)
             (input[length + 2] && input[length + 2] != '=')) continue;
         if (input[length + 2] == '=') {
             if (!strchr("adDEIklLmMopqRruw", aliases[i].short_option[1])) {
-                fprintf(stderr, "option --%s does not take an argument\n", aliases[i].name);
+                sr_console_printf(stderr, "option --%s does not take an argument\n", aliases[i].name);
                 exit(EXIT_FAILURE);
             }
             *argument = input + length + 3;
@@ -472,7 +469,7 @@ parse_relay_address(STREAM_PREFS *prefs, const char *value)
     }
     return;
 invalid:
-    fprintf(stderr, "Invalid relay address; use PORT, HOST:PORT, or [IPv6]:PORT (port 1-65535).\n");
+    sr_console_printf(stderr, "Invalid relay address; use PORT, HOST:PORT, or [IPv6]:PORT (port 1-65535).\n");
     exit(EXIT_FAILURE);
 }
 static u_long
@@ -483,7 +480,7 @@ parse_timeout(const char *value)
     errno = 0;
     timeout = g_ascii_strtoull(value, &end, 10);
     if (!g_ascii_isdigit(*value) || *end || errno == ERANGE || timeout > G_MAXINT) {
-        fprintf(stderr, "Invalid timeout; use integer seconds from 0 to %d.\n", G_MAXINT);
+        sr_console_printf(stderr, "Invalid timeout; use integer seconds from 0 to %d.\n", G_MAXINT);
         exit(EXIT_FAILURE);
     }
     return (u_long)timeout;
@@ -513,13 +510,13 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
         option = normalize_option(argv[i], &argument);
         if (!strcmp(option, "--config") || g_str_has_prefix(option, "--config=")) {
             if (config_file) {
-                fprintf(stderr, "Option --config may only be specified once.\n");
+                sr_console_printf(stderr, "Option --config may only be specified once.\n");
                 exit(EXIT_FAILURE);
             }
             if (option[8] == '=') config_file = option + 9;
             else if (i + 1 < argc && argv[i + 1][0] != '-') config_file = argv[++i];
             if (!config_file || !*config_file) {
-                fprintf(stderr, "Option --config requires a file path.\n");
+                sr_console_printf(stderr, "Option --config requires a file path.\n");
                 exit(EXIT_FAILURE);
             }
         } else if (!argument && strchr("dDEfIklLmMopRuwaqr", option[1]) &&
@@ -543,7 +540,7 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
         c = strchr("dDEfIklLmMopRuw", option[1]);
         if (c && !argument) {
             if (i == argc - 1 || argv[i + 1][0] == '-') {
-                fprintf(stderr, "option %s requires an argument\n", argv[i]);
+                sr_console_printf(stderr, "option %s requires an argument\n", argv[i]);
                 exit(EXIT_FAILURE);
             }
             argument = argv[++i];
@@ -556,7 +553,7 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
         case '4':
         case '6':
             if (prefs->ip_version && prefs->ip_version != option[1] - '0') {
-                fprintf(stderr, "Options -4/--ipv4 and -6/--ipv6 are mutually exclusive.\n");
+                sr_console_printf(stderr, "Options -4/--ipv4 and -6/--ipv6 are mutually exclusive.\n");
                 exit(EXIT_FAILURE);
             }
             prefs->ip_version = option[1] - '0';
@@ -585,7 +582,7 @@ g_strlcpy(prefs->output_pattern, argument, SR_MAX_PATH);
 g_strlcpy(prefs->ext_cmd, argument, SR_MAX_PATH);
 	    break;
 	case 'f':
-	    fprintf (stderr, "Error: -f dropstring option is obsolete. "
+	    sr_console_printf(stderr, "Error: -f dropstring option is obsolete. "
 		     "Please use -w parse_rules instead.\n");
 	    exit (1);
 	case 'h':
@@ -620,7 +617,7 @@ g_strlcpy(prefs->pls_file, argument, SR_MAX_PATH);
 	case 'o':
 	    prefs->overwrite = string_to_overwrite_opt (argument);
 	    if (prefs->overwrite == OVERWRITE_UNKNOWN) {
-		fprintf (stderr, "Error: -o option requires an argument\n");
+		sr_console_printf(stderr, "Error: -o option requires an argument\n");
 		exit (1);
 	    }
 	    break;
@@ -628,7 +625,7 @@ g_strlcpy(prefs->pls_file, argument, SR_MAX_PATH);
 g_strlcpy(prefs->proxyurl, argument, MAX_URL_LEN);
 	    break;
 	case 'P':
-	    fprintf (stderr, "Error: -P prefix option is obsolete. "
+	    sr_console_printf(stderr, "Error: -P prefix option is obsolete. "
 		     "Please use -D pattern instead.\n");
 	    exit (1);
 	case 'q':
@@ -682,7 +679,7 @@ g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
 
     /* Verify that first parameter is URL */
     if (argv[1][0] == '-') {
-	fprintf(stderr, "*** The first parameter MUST be the URL\n\n");
+	sr_console_printf(stderr, "*** The first parameter MUST be the URL\n\n");
 	exit(2);
     }
 }
@@ -732,7 +729,7 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
         else if (*end && !(*end == 's' && !end[1])) multiplier = 0;
         if (!g_ascii_isdigit(*value) || errno == ERANGE || !multiplier ||
             amount > G_MAXUINT64 / multiplier) {
-            fprintf(stderr, "Invalid incomplete duration; use non-negative integer seconds, e.g. 30s, 10m, or 1h.\n");
+            sr_console_printf(stderr, "Invalid incomplete duration; use non-negative integer seconds, e.g. 30s, 10m, or 1h.\n");
             exit(EXIT_FAILURE);
         }
         prefs->incomplete_min_duration_ms = amount * multiplier;
@@ -757,7 +754,7 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
     if (g_str_has_prefix(rule, "tls-ca-file=")) {
         const char *path = rule + strlen("tls-ca-file=");
         if (!*path || g_strlcpy(prefs->tls_ca_file, path, sizeof(prefs->tls_ca_file)) >= sizeof(prefs->tls_ca_file)) {
-            fprintf(stderr, "Invalid CA file path.\n");
+            sr_console_printf(stderr, "Invalid CA file path.\n");
             exit(EXIT_FAILURE);
         }
         return;
@@ -856,7 +853,7 @@ g_strlcpy (prefs->cs_opt.codeset_relay, &rule[x], MAX_CODESET_STRING);
     }
 
     /* All rules failed */
-    fprintf (stderr, "Can't parse command option: --%s\n", rule);
+    sr_console_printf(stderr, "Can't parse command option: --%s\n", rule);
     exit (-1);
 }
 
@@ -866,7 +863,7 @@ verify_splitpoint_rules (STREAM_PREFS *prefs)
 #if defined (commentout)
     /* This is still not complete, but the warning causes people to 
        wonder what is going on. */
-    fprintf (stderr, "Warning: splitpoint sanity check not yet complete.\n");
+    sr_console_printf(stderr, "Warning: splitpoint sanity check not yet complete.\n");
 #endif
     
     /* xs_silence_length must be non-negative and divisible by two */

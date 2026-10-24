@@ -24,6 +24,7 @@
 #include <glib/gstdio.h>
 
 #include "rip_manager.h"
+#include "console_output.h"
 #include "mchar.h"
 #include "prefs.h"
 #include "debug.h"
@@ -93,7 +94,7 @@ prefs_load_file (const char *filename)
     if (!filename) return TRUE;
     /* Explicit configuration is read-only; preserve the supplied values as-is. */
     if (!g_key_file_load_from_file(m_key_file, filename, G_KEY_FILE_NONE, &error)) {
-        fprintf(stderr, "Unable to load config file %s: %s\n", filename, error->message);
+        sr_console_printf(stderr, "Unable to load config file %s: %s\n", filename, error->message);
         g_error_free(error);
         return FALSE;
     }

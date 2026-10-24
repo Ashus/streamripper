@@ -9,6 +9,7 @@ PROJECT (streamripper_lib)
 
 SET (STREAMRIPPER_LIB_SRC
 	callback.c callback.h
+	console_output.c console_output.h
 	cbuf3.c cbuf3.h
 	charset.c charset.h
 	debug.c	debug.h
