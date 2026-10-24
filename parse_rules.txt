@@ -2,6 +2,7 @@
 #  This is an example of a file that can be customized for parsing metadata
 #
 #   USAGE:    streamripper URL -w parse_rules.txt
+#   FULL GUIDE: METADATA-RULES.md; advertisement example: advert_rules.txt
 ##--------------------------------------------------------------------------!
 
 # Lines that start with '#' are comments, and blank lines are ignored.
@@ -21,7 +22,7 @@
 #####  TRAILING LETTERS:
 # They can have the flags:
 #  e    -- drop metadata
-#  g    -- apply substitution globally
+#  g    -- accepted, but global substitution is not implemented
 #  i    -- ignore case
 #  s    -- save track
 #  x    -- exclude track
@@ -65,6 +66,8 @@ s/^[[:space:]]*-[[:space:]]*//
 # The strip rules don't have to be after the m//e, m//s and m//x 
 # rules.  You can interleave them.  Rules are always processed
 # in order.
+# Substitutions replace the first occurrence with literal text; replacement
+# backreferences are not expanded. Use capture flags for artist/title fields.
 
 # This is the normal parsing rule: "Artist - Title"
 # The trailing "A1" means that the artist (A) matches subpattern 1

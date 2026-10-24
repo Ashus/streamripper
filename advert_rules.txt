@@ -1,0 +1,16 @@
+# Example: streamripper URL -w advert_rules.txt -q
+# Customize the expression for the metadata actually sent by your station.
+# See METADATA-RULES.md for syntax, ordering, examples, and limitations.
+# These expressions match ICY metadata, not paths or numeric filename prefixes.
+# x excludes a track but keeps its boundary; i makes the expression case-insensitive.
+# Keep exclusion rules before the artist/title parsing rules.
+
+m/\badvert\b/ix
+
+# Optional: exclude explicitly empty or hyphen-only titles.
+# m/^[[:space:]-]*$/x
+
+# Preserve the standard MP3Pro cleanup and Artist - Title parsing.
+s/[[:space:]]*-?[[:space:]]*mp3pro$//i
+m/^[[:space:]]*(.*?[^-[:space:]])[[:space:]]+-[[:space:]]+(.*)[[:space:]]*$/A1T2
+m/^[[:space:]]*([^-]*[^-[:space:]])[[:space:]]*-[[:space:]]*(.*)[[:space:]]*$/A1T2

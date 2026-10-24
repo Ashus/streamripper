@@ -60,7 +60,8 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=release) as temporary:
     (stage / 'licenses' / 'libmad').mkdir(exist_ok=True)
     shutil.copy2(repo / 'COPYING', stage / 'licenses' / 'libmad' / 'COPYING')
     for name in ('COPYING', 'README', 'README.md', 'README-HTTPS.md', 'BUILDING.md', 'CHANGELOG.md',
-                 'PORTING.md', 'VERSION', 'THIRD-PARTY.md'):
+                 'PORTING.md', 'VERSION', 'THIRD-PARTY.md', 'METADATA-RULES.md',
+                 'parse_rules.txt', 'advert_rules.txt'):
         shutil.copy2(repo / name, stage / name)
     versions = {}
     for name, module in modules.items():

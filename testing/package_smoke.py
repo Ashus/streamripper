@@ -29,6 +29,9 @@ def package(dest):
         entries[relative] = digest
     assert 'streamripper.exe' in entries and 'libvorbis-0.dll' in entries
     assert 'licenses/libvorbis/COPYING' in entries
+    for name in ('METADATA-RULES.md', 'parse_rules.txt', 'advert_rules.txt'):
+        assert name in entries
+        assert (dest / name).read_bytes() == (repo / name).read_bytes()
     assert (dest / 'licenses/libvorbis/COPYING').read_bytes() == (repo / 'third_party/licenses/libvorbis/COPYING').read_bytes()
     output = subprocess.check_output([str(dest / 'streamripper.exe'), '--version'], cwd=dest, text=True)
     assert output.strip() == 'Streamripper ' + (repo / 'VERSION').read_text().strip()

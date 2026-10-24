@@ -47,6 +47,7 @@ track_info_different (TRACK_INFO *t1, TRACK_INFO *t2)
        parse rules may have stripped garbage out, causing the resulting 
        track info to be the same. */
     if (!strcmp(t1->artist, t2->artist)
+	&& t1->save_track == t2->save_track
 	&& !strcmp(t1->title, t2->title)
 	&& !strcmp(t1->album, t2->album)
 	&& !strcmp(t1->track_p, t2->track_p)
@@ -113,4 +114,3 @@ track_info_copy (TRACK_INFO* dest, TRACK_INFO* src)
     strcpy (dest->composed_metadata, src->composed_metadata);
     dest->save_track = src->save_track;
 }
-

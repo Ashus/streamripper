@@ -340,12 +340,8 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
     debug_printf ("ripstream_mp3_write_oldest_node: %d, %d\n",
 	GET_INDIVIDUAL_TRACKS (rmi->prefs->flags), rmi->write_data);
 
-    /* If we're not writing tracks, return */
-    /* GCS FIX - this logic is obsolete - writer shouldn't enter 
-       write_list if not needed. */
-    if (!GET_INDIVIDUAL_TRACKS (rmi->prefs->flags) || !rmi->write_data) {
-	return SR_SUCCESS;
-    }
+    /* Excluded tracks still need boundary writers so their audio cannot leak
+       into adjacent tracks. Advance and retire them without opening a file. */
 
     /* Loop through tracks that might need to be written */
     debug_printf ("Looping through write_list\n");
@@ -353,6 +349,8 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
     p = write_list->head;
     while (p) {
 	Writer *writer = (Writer*) p->data;
+	BOOL save_track = GET_INDIVIDUAL_TRACKS(rmi->prefs->flags)
+            && writer->m_ti.save_track;
 	nextp = p->next;
 
 	debug_printf ("Writer %02d: (%p), (%p,%p) %s\n", 
@@ -370,7 +368,7 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
 	    debug_printf ("Writer requesed this node\n");
 
 	    /* Open the file and write header */
-	    if (!writer->m_started) {
+	    if (save_track && !writer->m_started) {
 		error_code rc = ripstream_mp3_start_track (rmi, writer);
 		writer->m_started = 1;
                 if (rc != SR_SUCCESS) return rc;
@@ -385,7 +383,7 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
 		    - writer->m_next_byte.offset;
 	    }
 	    write_ptr = ((char*) node->data) + writer->m_next_byte.offset;
-            {
+            if (save_track) {
                 error_code rc = filelib_write_track (writer, write_ptr, write_sz);
                 if (rc != SR_SUCCESS) return rc;
             }
@@ -394,8 +392,10 @@ ripstream_mp3_write_oldest_node (RIP_MANAGER_INFO* rmi)
 	    if (writer->m_last_byte.node == node) {
 		/* Yes we do, so add id3, close file, etc. */
 		debug_printf ("Ending track\n");
-                error_code rc = ripstream_mp3_end_track (rmi, writer);
-                if (rc != SR_SUCCESS) return rc;
+                if (save_track) {
+                    error_code rc = ripstream_mp3_end_track (rmi, writer);
+                    if (rc != SR_SUCCESS) return rc;
+                }
 
 		/* Free up writer */
 		free (writer);

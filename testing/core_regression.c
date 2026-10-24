@@ -7,6 +7,7 @@
 #include "ripstream_wav.h"
 #include "http.h"
 #include "findsep.h"
+#include "track_info.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <psapi.h>
@@ -65,6 +66,13 @@ static void parser_cycle(RIP_MANAGER_INFO *rmi)
 
 int main(int argc, char **argv)
 {
+    /* Identical parsed titles still need a boundary when selection changes. */
+    TRACK_INFO excluded = {0}, accepted = {0};
+    accepted.save_track = TRUE;
+    CHECK(track_info_different(&excluded, &accepted));
+    excluded.save_track = TRUE;
+    CHECK(!track_info_different(&excluded, &accepted));
+
     if (argc == 3 && !strcmp(argv[1], "--silence")) {
         gchar *audio = NULL;
         gsize size;

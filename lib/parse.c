@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <glib/gstdio.h>
 #include "srconfig.h"
 #include "mchar.h"
 #include "debug.h"
@@ -291,7 +292,7 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	use_default_rules (rmi);
 	return;
     }
-    fp = fopen (rules_file, "r");
+    fp = g_fopen (rules_file, "r");
     if (!fp) {
 	use_default_rules (rmi);
 	return;
