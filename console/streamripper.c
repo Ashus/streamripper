@@ -316,6 +316,7 @@ print_usage (FILE* stream)
     fprintf(stream, "      --debug        - Save debugging trace\n");
     fprintf(stream, "      --insecure     - Disable TLS certificate and hostname verification\n");
     fprintf(stream, "      --http10       - Use HTTP/1.0 for compatibility with old servers\n");
+    fprintf(stream, "      --wav          - Decode MP3 recordings to 16-bit PCM WAV\n");
     fprintf(stream, "      --tls-ca-file=path - Add trusted CAs from a PEM file\n");
     fprintf(stream, "      --tls-info     - Print TLS version, cipher, group, and signature\n");
     fprintf(stream, "ID3 opts (mp3/aac/nsv):  [The default behavior is adding ID3V2.3 only]\n");
@@ -518,6 +519,10 @@ g_strlcpy(prefs->rules_file, argv[i], SR_MAX_PATH);
 
     /* Need to verify that splitpoint rules were sane */
     verify_splitpoint_rules (prefs);
+    if (prefs->wav) {
+        OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 0);
+        OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 0);
+    }
 
     /* Verify that first parameter is URL */
     if (argv[1][0] == '-') {
@@ -562,6 +567,10 @@ parse_extended_options (STREAM_PREFS* prefs, char* rule)
     }
     if (!strcmp(rule, "http10")) {
         prefs->http10 = TRUE;
+        return;
+    }
+    if (!strcmp(rule, "wav")) {
+        prefs->wav = TRUE;
         return;
     }
     if (g_str_has_prefix(rule, "tls-ca-file=")) {

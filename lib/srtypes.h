@@ -372,6 +372,7 @@ struct writer
     Cbuf3_pointer    m_next_byte;
     Cbuf3_pointer    m_last_byte;
     FHANDLE          m_file;
+    struct wav_output *m_wav;
     TRACK_INFO       m_ti;
 };
 
@@ -437,6 +438,7 @@ typedef struct FILELIB_INFO_struct FILELIB_INFO;
 struct FILELIB_INFO_struct
 {
     FHANDLE m_show_file;
+    struct wav_output *m_show_wav;
     FHANDLE m_cue_file;
     int m_count;
     int m_do_show;
@@ -467,6 +469,7 @@ struct stream_prefs
 {
     BOOL tls_insecure;
     BOOL http10;
+    BOOL wav;
     BOOL tls_info;
     char tls_ca_file[SR_MAX_PATH];
     char label[MAX_URL_LEN];		// logical name for this stream

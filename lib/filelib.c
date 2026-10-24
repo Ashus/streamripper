@@ -22,6 +22,7 @@
 #include <errno.h>
 #include "sr_compat.h"
 #include "filelib.h"
+#include "ripstream_wav.h"
 #include "mchar.h"
 #include "debug.h"
 #include <assert.h>
@@ -189,7 +190,7 @@ filelib_init (RIP_MANAGER_INFO* rmi,
 
     switch (content_type) {
     case CONTENT_TYPE_MP3:
-	fli->m_extension = m_(".mp3");
+	fli->m_extension = rmi->prefs->wav ? m_(".wav") : m_(".mp3");
 	break;
     case CONTENT_TYPE_NSV:
     case CONTENT_TYPE_ULTRAVOX:
@@ -300,7 +301,12 @@ filelib_start (RIP_MANAGER_INFO* rmi, Writer *writer, TRACK_INFO* ti)
 				  fnbase, fli->m_extension);
     }
     mstrcpy (fli->m_incomplete_filename, newfile);
-    return filelib_open_for_write (rmi, &writer->m_file, newfile);
+    {
+        error_code rc = filelib_open_for_write (rmi, &writer->m_file, newfile);
+        if (rc == SR_SUCCESS && rmi->prefs->wav)
+            rc = wav_output_init(&writer->m_wav, writer->m_file);
+        return rc;
+    }
 }
 
 error_code
@@ -323,6 +329,7 @@ error_code
 filelib_write_track (Writer *writer, char *buf, u_long size)
 {
     debug_printf ("filelib_write_track %p %u\n", buf, size);
+    if (writer->m_wav) return wav_output_write(writer->m_wav, buf, size);
     return filelib_write (writer->m_file, buf, size);
 }
 
@@ -336,7 +343,8 @@ filelib_write_show (RIP_MANAGER_INFO* rmi, char *buf, u_long size)
 	return SR_SUCCESS;
     }
     debug_printf ("Trying to write showfile\n");
-    rc = filelib_write (fli->m_show_file, buf, size);
+    rc = fli->m_show_wav ? wav_output_write(fli->m_show_wav, buf, size)
+                        : filelib_write (fli->m_show_file, buf, size);
     if (rc != SR_SUCCESS) {
 	fli->m_do_show = 0;
     }
@@ -433,8 +441,11 @@ filelib_close (
     if (!fli->m_do_individual_tracks) {
 	return SR_SUCCESS;
     }
-    close_file (&writer->m_file);
-    return SR_SUCCESS;
+    {
+        error_code rc = wav_output_finish(&writer->m_wav);
+        close_file (&writer->m_file);
+        return rc;
+    }
 }
 
 void
@@ -813,6 +824,8 @@ static void
 close_files (RIP_MANAGER_INFO* rmi)
 {
     FILELIB_INFO* fli = &rmi->filelib_info;
+    if (wav_output_finish(&fli->m_show_wav) != SR_SUCCESS)
+        fprintf(stderr, "Unable to finalize WAV show output.\n");
     /* GCS FIX: Need to close writers */
     //    close_file (&fli->m_file);
     close_file (&fli->m_show_file);
@@ -1340,8 +1353,8 @@ filelib_open_showfiles (RIP_MANAGER_INFO* rmi)
 	}
 	debug_mprintf (m_("show_name: ") m_S m_(", basename: ") m_S m_("\n"),
 		       fli->m_show_name, basename);
-	rc = msnprintf (mcue_buf, 1024, m_("FILE \"") m_S m_("\" MP3\n"), 
-			basename);
+	rc = msnprintf (mcue_buf, 1024, m_("FILE \"") m_S m_("\" ") m_S m_("\n"),
+			basename, rmi->prefs->wav ? m_("WAVE") : m_("MP3"));
 	g_strlcpy(cue_buf, mcue_buf, sizeof(cue_buf));
         rc = strlen(cue_buf);
 	rc = filelib_write (fli->m_cue_file, cue_buf, rc);
@@ -1353,6 +1366,8 @@ filelib_open_showfiles (RIP_MANAGER_INFO* rmi)
 
     /* Open show file */
     rc = filelib_open_for_write (rmi, &fli->m_show_file, fli->m_show_name);
+    if (rc == SR_SUCCESS && rmi->prefs->wav)
+        rc = wav_output_init(&fli->m_show_wav, fli->m_show_file);
     if (rc != SR_SUCCESS) {
 	fli->m_do_show = 0;
 	return rc;

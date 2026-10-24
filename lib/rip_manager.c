@@ -428,6 +428,11 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     g_strlcpy (rmi->server_name, rmi->http_info.server, sizeof(rmi->server_name));
 
     /* Initialize file writing code. */
+    if (prefs->wav && rmi->http_info.content_type != CONTENT_TYPE_MP3) {
+        fprintf(stderr, "--wav currently supports MP3 input only.\n");
+        ret = SR_ERROR_DECODE_FAILURE;
+        goto RETURN_ERR;
+    }
     ret = filelib_init
 	    (rmi, 
 	     GET_INDIVIDUAL_TRACKS(rmi->prefs->flags),
