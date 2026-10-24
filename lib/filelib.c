@@ -1404,8 +1404,13 @@ static int
 get_next_sequence_number (RIP_MANAGER_INFO* rmi, gchar* fn_base)
 {
 #ifdef SR_MODERN_WINDOWS
-    gchar *directory = g_path_get_dirname(fn_base);
-    gchar *prefix = g_path_get_basename(fn_base);
+    /* At the start of a filename, fn_base ends in a directory separator.
+       g_path_get_basename() would return the directory name, not an empty
+       filename prefix, and every sequence lookup would incorrectly return 0. */
+    size_t length = strlen(fn_base);
+    gboolean directory_only = length && ISSLASH(fn_base[length - 1]);
+    gchar *directory = directory_only ? g_strdup(fn_base) : g_path_get_dirname(fn_base);
+    gchar *prefix = directory_only || !length ? g_strdup("") : g_path_get_basename(fn_base);
     GDir *dir = g_dir_open(directory, 0, NULL);
     const gchar *name;
     int sequence = 0;
