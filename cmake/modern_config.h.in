@@ -2,7 +2,12 @@
 #define SR_CONFIG_H
 #include <stdint.h>
 #define HAVE_ICONV 1
+#ifdef WIN32
 #define HAVE_LOCALE_CHARSET 1
+#else
+#define HAVE_LANGINFO_CODESET 1
+#define HAVE_UNISTD_H 1
+#endif
 #define HAVE_UINT32_T 1
 #define HAVE_WCHAR_SUPPORT 1
 #define HAVE_WCHAR_H 1

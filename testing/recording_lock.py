@@ -5,12 +5,13 @@ import contextlib
 import http.server
 import os
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 
 repo = Path(__file__).resolve().parents[1]
-exe = repo / "dist" / "streamripper.exe"
+exe = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else repo / "dist" / "streamripper.exe"
 audio = (repo / "build" / "sample-5s.mp3").read_bytes()
 requests = []
 
@@ -80,7 +81,7 @@ def rejected(process, owner, require_pid=True):
 
 
 try:
-    with tempfile.TemporaryDirectory(prefix="recording-lock-", dir=repo / "build") as temporary, contextlib.ExitStack() as children:
+    with tempfile.TemporaryDirectory(prefix="recording-lock-", dir=repo / "build" if os.name == "nt" else None) as temporary, contextlib.ExitStack() as children:
         root = Path(temporary)
         dest = root / "žluťoučký"
         owner = start(dest, endpoint="/reconnect")

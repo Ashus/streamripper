@@ -39,7 +39,12 @@ ELSE (UNIX)
 ENDIF (UNIX)
 
 IF (UNIX)
-  PKG_CHECK_MODULES (GLIB2 REQUIRED glib-2.0>=2.16)
+  PKG_CHECK_MODULES (GLIB2 REQUIRED glib-2.0>=2.66)
+  FIND_PACKAGE (OpenSSL 3.0 REQUIRED)
+  FIND_PACKAGE (Threads REQUIRED)
+  FILE (STRINGS "${CMAKE_SOURCE_DIR}/VERSION" SR_RELEASE_VERSION LIMIT_COUNT 1)
+  ADD_COMPILE_DEFINITIONS (__UNIX__ SR_CMAKE_POSIX HAVE_OPENSSL _FILE_OFFSET_BITS=64
+    SRVERSION="${SR_RELEASE_VERSION}")
 ENDIF (UNIX)
 
 SET (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -64,8 +69,12 @@ INCLUDE_DIRECTORIES (BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 ##-----------------------------------------------------------------------------
 ##  Configure include file
 ##-----------------------------------------------------------------------------
-CONFIGURE_FILE (${CMAKE_CURRENT_SOURCE_DIR}/sr_config.h.cmake 
-  ${CMAKE_CURRENT_BINARY_DIR}/sr_config.h)
+IF (UNIX)
+  CONFIGURE_FILE (cmake/modern_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/sr_config.h)
+ELSE ()
+  CONFIGURE_FILE (${CMAKE_CURRENT_SOURCE_DIR}/sr_config.h.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/sr_config.h)
+ENDIF ()
 
 ##-----------------------------------------------------------------------------
 ##  Copy dlls
@@ -116,6 +125,15 @@ SET (STREAMRIPPER_LIBS ${STREAMRIPPER_LIBS} ${SR_EXTRA_LIBS} ${MATH_LIB})
 ADD_EXECUTABLE (streamripper ${STREAMRIPPER_SRC})
 TARGET_LINK_LIBRARIES (streamripper ${MY_MATH_LIB} 
   streamripper1 ${STREAMRIPPER_LIBS})
+IF (UNIX)
+  TARGET_LINK_LIBRARIES (streamripper1 PUBLIC OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+  INCLUDE (CTest)
+  IF (BUILD_TESTING)
+    ADD_EXECUTABLE (preallocation_regression testing/file_preallocation.c lib/file_preallocation.c)
+    TARGET_LINK_LIBRARIES (preallocation_regression PRIVATE ${GLIB2_LIBRARIES})
+    ADD_TEST (NAME preallocation_regression COMMAND preallocation_regression)
+  ENDIF ()
+ENDIF ()
 
 
 

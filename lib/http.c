@@ -134,7 +134,7 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	    /* RECURSIVE CASE */
 	    debug_printf ("Redirecting: %s\n", info->http_location);
             char redirect[MAX_URL_LEN];
-#ifdef SR_MODERN_WINDOWS
+#if defined(SR_MODERN_WINDOWS) || defined(SR_CMAKE_POSIX)
             GError *error = NULL;
             char *resolved = g_uri_resolve_relative(url, info->http_location, G_URI_FLAGS_ENCODED, &error);
             if (!resolved || strlen(resolved) >= sizeof(redirect)) {
@@ -199,7 +199,7 @@ unescape_pct_encoding (char* s)
 static error_code
 http_parse_url(const char *url, URLINFO *urlinfo)
 { 
-#ifdef SR_MODERN_WINDOWS
+#if defined(SR_MODERN_WINDOWS) || defined(SR_CMAKE_POSIX)
     GError *error = NULL;
     char *absolute = strstr(url, "://") ? g_strdup(url) : g_strconcat("http://", url, NULL);
     GUri *uri = g_uri_parse(absolute, G_URI_FLAGS_ENCODED | G_URI_FLAGS_HAS_PASSWORD, &error);

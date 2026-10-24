@@ -1,7 +1,7 @@
 #ifndef __SRCONFIG_H__
 #define __SRCONFIG_H__
 
-#if defined (SR_MODERN_WINDOWS)
+#if defined (SR_MODERN_WINDOWS) || defined (SR_CMAKE_POSIX)
 #include "sr_config.h"
 #elif defined (WIN32)
 #include "confw32.h"

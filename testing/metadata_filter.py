@@ -3,6 +3,8 @@ from pathlib import Path
 import http.server
 import datetime
 import re
+import os
+import sys
 import subprocess
 import tempfile
 import threading
@@ -10,6 +12,7 @@ import time
 import wave
 
 repo = Path(__file__).resolve().parents[1]
+exe = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else repo / 'dist/streamripper.exe'
 audio = (repo / 'build' / 'sample-5s.mp3').read_bytes()
 titles = ['ADVERT - Žluťoučký', 'Artist - One mp3pro', 'advert - Break',
           'ADVERT - Another break', 'Artist - Two', ' - ',
@@ -43,7 +46,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 try:
-    with tempfile.TemporaryDirectory(prefix='metadata-filter-', dir=repo / 'build') as tmp:
+    with tempfile.TemporaryDirectory(prefix='metadata-filter-', dir=repo / 'build' if os.name == 'nt' else None) as tmp:
         root = Path(tmp)
         rules = root / 'pravidla-žluťoučký.txt'
         example = (repo / 'advert_rules.txt').read_text(encoding='utf-8')
@@ -51,7 +54,7 @@ try:
                                          r'm/^[\s-]*$/x'), encoding='utf-8')
         for wav in (False, True):
             dest = root / 'žluťoučký' / ('wav' if wav else 'mp3')
-            args = [str(repo / 'dist' / 'streamripper.exe'),
+            args = [str(exe),
                     f'http://localhost:{server.server_port}/stream', '-c', '-l', '4',
                     '-k', '0', '-s', '-d', str(dest), '-q', '1', '--xs-none',
                     '-w', str(rules), '--codeset-metadata=AUTO']
@@ -97,7 +100,7 @@ try:
             log_path = dest / 'incomplete' / 'metadata.log'
             if blocked:
                 log_path.mkdir(parents=True)
-            result = subprocess.run([str(repo / 'dist' / 'streamripper.exe'),
+            result = subprocess.run([str(exe),
                         f'http://localhost:{server.server_port}/stream', '-c', '-l', '1',
                         '-s', '-d', str(dest), '-A', '-a', 'show', '--metadata-log',
                         '--codeset-metadata=AUTO'], capture_output=True, timeout=10)
