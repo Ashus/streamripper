@@ -61,6 +61,7 @@ char	*left_str(char *str, int len);
 char	*subnstr_until(const char *str, char *until, char *newstr, int maxlen);
 char	*format_byte_size(char *str, long size);
 void	trim(char *str);
+static const char *default_codeset(void);
 
 
 /*****************************************************************************
@@ -432,6 +433,18 @@ gstring_from_string (RIP_MANAGER_INFO* rmi, mchar* m, int mlen,
 	    break;
 	case CODESET_METADATA:
 	    src_codeset = mchar_cs->codeset_metadata;
+	    if (!g_ascii_strcasecmp(src_codeset, "AUTO")) {
+                /* ICY servers often send UTF-8 without declaring a charset.
+                   Detect each update independently; never reinterpret an
+                   explicitly selected encoding. Legacy bytes use the locale. */
+                if (g_utf8_validate(c, -1, NULL)) {
+                    src_codeset = "UTF-8";
+                } else {
+                    src_codeset = (char *) default_codeset();
+                    if (!g_ascii_strcasecmp(src_codeset, "UTF-8"))
+                        src_codeset = "ISO-8859-1";
+                }
+            }
 	    break;
 	case CODESET_RELAY:
 	    src_codeset = mchar_cs->codeset_relay;
@@ -516,7 +529,7 @@ string_from_gstring (RIP_MANAGER_INFO* rmi, char* c, int clen, mchar* m, int cod
     }
 }
 
-const char*
+static const char*
 default_codeset (void)
 {
     const char* fromcode = 0;
@@ -592,11 +605,12 @@ set_codesets_default (CODESET_OPTIONS* cs_opt)
     /* Always use UTF-16 for id3 */
     strncpy (cs_opt->codeset_id3, "UTF-16", MAX_CODESET_STRING);
 
-    /* Don't use UTF-8 for metadata */
+    /* Legacy relay output remains single-byte unless explicitly configured. */
     if (!strcmp (fromcode, "UTF-8")) {
-	strncpy (cs_opt->codeset_metadata, "ISO-8859-1", MAX_CODESET_STRING);
 	strncpy (cs_opt->codeset_relay, "ISO-8859-1", MAX_CODESET_STRING);
     }
+    /* Prefer valid UTF-8 ICY text, with a legacy locale fallback. */
+    g_strlcpy(cs_opt->codeset_metadata, "AUTO", MAX_CODESET_STRING);
 }
 
 void

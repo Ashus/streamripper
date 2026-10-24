@@ -350,6 +350,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "-z, --no-port-scan", "Disable scanning for a free relay port");
     fputs("\nText encoding:\n", stream);
     print_usage_option(stream, "--codeset-metadata=NAME", "Set the incoming metadata encoding");
+    print_usage_option(stream, "", "Default: AUTO (UTF-8, else locale)");
     print_usage_option(stream, "--codeset-id3=NAME", "Set the ID3 text encoding");
     print_usage_option(stream, "--codeset-filesys=NAME", "Set the file-system encoding");
     print_usage_option(stream, "--codeset-relay=NAME", "Set the relay metadata encoding");

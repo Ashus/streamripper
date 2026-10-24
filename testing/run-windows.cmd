@@ -14,6 +14,8 @@ python testing\sequence_number.py
 if errorlevel 1 goto failed
 python testing\metadata_filter.py
 if errorlevel 1 goto failed
+python testing\metadata_encoding.py
+if errorlevel 1 goto failed
 python testing\audio_headers.py
 if errorlevel 1 goto failed
 python testing\incomplete_duration.py
