@@ -2,6 +2,7 @@
 from pathlib import Path
 import http.server
 import datetime
+import re
 import subprocess
 import tempfile
 import threading
@@ -84,6 +85,11 @@ try:
                         assert recorded.getnframes() > 0
             else:
                 assert not list(dest.rglob('metadata.log'))
+                statuses = re.findall(rb'\[\s*(filtered|incomplete|ripping)\.\.\.\s*\] ([^\r\n]*)', result.stdout)
+                assert any(state == b'filtered' and b'ADVERT -' in title for state, title in statuses), statuses
+                assert not any(state == b'ripping' and b'ADVERT -' in title for state, title in statuses), statuses
+                assert not any(state == b'incomplete' and b'ADVERT -' in title for state, title in statuses), statuses
+                assert any(state == b'ripping' and b'Artist - One' in title for state, title in statuses), statuses
             print('PASS:', extension, 'exclusion, Unicode rules path, empty/hyphen titles, consecutive numbering')
         for blocked in (False, True):
             dest = root / ('blocked-log' if blocked else 'show-only')

@@ -111,11 +111,12 @@ try:
         leftovers = [path for path in files if path.parent == incomplete]
         assert len(leftovers) == 2 and all(path.read_bytes() == old for path in leftovers), leftovers
         assert result.stderr.count(b'Discarded incomplete recording') >= 2
-        statuses = re.findall(rb'\[\s*(skipping|ripping)\.\.\.\s*\] Artist - Song (\d+)', result.stdout)
-        assert (b'skipping', b'0') in statuses, result.stdout
+        statuses = re.findall(rb'\[\s*(incomplete|filtered|ripping)\.\.\.\s*\] Artist - Song (\d+)', result.stdout)
+        assert (b'incomplete', b'0') in statuses, result.stdout
         assert (b'ripping', b'0') not in statuses, statuses
         assert (b'ripping', b'1') in statuses, statuses
-        assert (b'skipping', b'1') not in statuses, statuses
+        assert (b'incomplete', b'1') not in statuses, statuses
+        assert not any(state == b'filtered' for state, _ in statuses), statuses
         assert any(path.name.endswith('Artist - Song 1.mp3') for path in completed), completed
         assert not any(b'Discarded incomplete recording' in line and b'Song 1.mp3' in line
                        for line in result.stderr.splitlines()), result.stderr

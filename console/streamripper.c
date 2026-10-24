@@ -244,8 +244,10 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    break;
 
 	case RM_STATUS_RIPPING:
-	    if (rmi->callback_skipping) {
-		strcpy(status_str, "skipping...   ");
+	    if (rmi->callback_filtered) {
+		strcpy(status_str, "filtered...   ");
+	    } else if (rmi->callback_incomplete) {
+		strcpy(status_str, "incomplete... ");
 	    } else {
 		strcpy(status_str, "ripping...    ");
 	    }
