@@ -563,9 +563,11 @@ void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer)
             fprintf(stderr, "Unable to remove incomplete recording: %s\n", path);
             return;
         }
+        gchar *basename = g_path_get_basename(path);
         fprintf(stderr, "Discarded incomplete recording (%" G_GUINT64_FORMAT
-                " ms < %" G_GUINT64_FORMAT " ms): %s\n",
-                writer->m_duration_ms, minimum, path);
+                " s < %" G_GUINT64_FORMAT " s): %s\n",
+                writer->m_duration_ms / 1000, minimum / 1000, basename);
+        g_free(basename);
         writer->m_is_incomplete = FALSE;
     }
 }
