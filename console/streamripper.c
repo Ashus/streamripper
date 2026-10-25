@@ -217,8 +217,6 @@ print_status (RIP_MANAGER_INFO *rmi)
     STREAM_PREFS *prefs = rmi->prefs;
     char status_str[128];
     char duration_str[32];
-    int title_bytes = (int)(g_utf8_offset_to_pointer(rmi->callback_filename,
-        MIN(g_utf8_strlen(rmi->callback_filename, -1), 50)) - rmi->callback_filename);
     static int buffering_tick = 0;
     static BOOL printed_fullinfo = FALSE;
 
@@ -237,10 +235,8 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    sprintf(status_str,"buffering - %c ",
 		    m_buffer_chars[buffering_tick]);
 
-	    print_to_console ("[%14s] %.*s\r",
-			      status_str,
-			      title_bytes,
-			      rmi->callback_filename);
+            sr_console_status(m_print_stderr ? stderr : stdout, status_str,
+                              rmi->callback_filename, NULL);
 	    break;
 
 	case RM_STATUS_RIPPING:
@@ -271,15 +267,12 @@ print_status (RIP_MANAGER_INFO *rmi)
                     g_snprintf(duration_str, sizeof(duration_str), "%02u:%02u",
                                (unsigned)(seconds / 60), (unsigned)(seconds % 60));
             }
-	    print_to_console ("[%14s] %.*s [%8s]\r",
-			      status_str,
-			      title_bytes,
-			      rmi->callback_filename,
-			      duration_str);
+            sr_console_status(m_print_stderr ? stderr : stdout, status_str,
+                              rmi->callback_filename, duration_str);
 	    break;
 	case RM_STATUS_RECONNECTING:
 	    strcpy(status_str, "re-connecting..");
-	    print_to_console ("[%14s]\r", status_str);
+            sr_console_status(m_print_stderr ? stderr : stdout, status_str, "", NULL);
 	    break;
 	}
 			

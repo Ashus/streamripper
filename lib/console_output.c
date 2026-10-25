@@ -4,7 +4,78 @@
 #include <windows.h>
 #include <io.h>
 #include <stdint.h>
+#else
+#include <unistd.h>
+#include <sys/ioctl.h>
 #endif
+
+static int console_columns(FILE *stream)
+{
+#ifdef WIN32
+    HANDLE handle = (HANDLE)(intptr_t)_get_osfhandle(_fileno(stream));
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    if (GetConsoleScreenBufferInfo(handle, &info))
+        return info.srWindow.Right - info.srWindow.Left + 1;
+#else
+    struct winsize size;
+    if (isatty(fileno(stream)) && ioctl(fileno(stream), TIOCGWINSZ, &size) == 0 && size.ws_col)
+        return size.ws_col;
+#endif
+    return 0;
+}
+
+/* Count display columns rather than bytes; combining marks occupy no column. */
+static char *fit_columns(const char *text, int budget, int *columns)
+{
+    char *valid = g_utf8_make_valid(text, -1);
+    GString *result = g_string_new(NULL);
+    const char *p;
+    *columns = 0;
+    for (p = valid; *p; p = g_utf8_next_char(p)) {
+        gunichar c = g_utf8_get_char(p);
+        int width;
+        if (g_unichar_iscntrl(c)) c = ' ';
+        width = g_unichar_iszerowidth(c) ? 0 : g_unichar_iswide(c) ? 2 : 1;
+        if (*columns + width > budget) break;
+        g_string_append_unichar(result, c);
+        *columns += width;
+    }
+    g_free(valid);
+    return g_string_free(result, FALSE);
+}
+
+void sr_console_status(FILE *stream, const char *status, const char *title, const char *detail)
+{
+    int columns = console_columns(stream), used;
+    char *suffix = detail ? g_strdup_printf(" [%8s]", detail) : g_strdup("");
+    int budget = columns ? MAX(0, columns - 1 - 17 - (int)strlen(suffix)) : 50;
+    char *name = fit_columns(title, budget, &used);
+    char *line = g_strdup_printf("[%14s] %s%s", status, name, suffix);
+    if (columns) {
+        char *fitted = fit_columns(line, columns - 1, &used);
+        /* Erase through the last column without triggering automatic wrapping. */
+#ifdef WIN32
+        HANDLE handle = (HANDLE)(intptr_t)_get_osfhandle(_fileno(stream));
+        CONSOLE_SCREEN_BUFFER_INFO info;
+        if (GetConsoleScreenBufferInfo(handle, &info)) {
+            DWORD cleared;
+            COORD start = {info.srWindow.Left, info.dwCursorPosition.Y};
+            FillConsoleOutputCharacterW(handle, L' ', columns, start, &cleared);
+            SetConsoleCursorPosition(handle, start);
+            sr_console_printf(stream, "%s", fitted);
+            SetConsoleCursorPosition(handle, start);
+        }
+#else
+        sr_console_printf(stream, "\r%s\033[K\r", fitted);
+#endif
+        g_free(fitted);
+    } else {
+        sr_console_printf(stream, "%s\r", line);
+    }
+    g_free(line);
+    g_free(name);
+    g_free(suffix);
+}
 
 /* Keep UTF-8 in pipes and files; bypass CRT code-page conversion on Windows consoles. */
 int
