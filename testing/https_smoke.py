@@ -181,8 +181,8 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
     def reconnect_test():
         env = dict(os.environ, SSL_CERT_FILE=str(cert))
         result = subprocess.run([str(exe), f'https://localhost:{tls.server_port}/reconnect',
-                    '-l', '5', '-s', '-A', '-a', 'show', '-d', str(root / 'reconnect'),
-                    '--tls-info'], capture_output=True, timeout=15, env=env)
+                    '-l', '10', '-s', '-A', '-a', 'show', '-d', str(root / 'reconnect'),
+                    '--tls-info'], capture_output=True, timeout=20, env=env)
         assert result.returncode == 0, result.stdout + result.stderr
         assert Handler.reconnect_requests >= 2, Handler.reconnect_requests
         assert result.stdout.count(b'TLS: ') == 1, result.stdout

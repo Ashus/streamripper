@@ -58,6 +58,7 @@
 #include "parse.h"
 #include "http.h"
 #include "callback.h"
+#include "console_output.h"
 
 /******************************************************************************
  * Private functions
@@ -184,11 +185,10 @@ void
 rip_manager_stop (RIP_MANAGER_INFO *rmi)
 {
     // Make sure this function isn't getting called twice
-    if (!rmi || rmi->stopped) {
+    if (!rmi || !g_atomic_int_compare_and_exchange(&rmi->stopped, FALSE, TRUE)) {
 	debug_printf ("rip_manager_stop() called while not started\n");
 	return;
     }
-    rmi->stopped = TRUE;
     
     /* Write to pipe so ripping thread will exit select() */
 #if __UNIX__
@@ -256,6 +256,37 @@ debug_ripthread (RIP_MANAGER_INFO* rmi)
     \callgraph
     \callergraph
 */
+static BOOL retryable_error(error_code error)
+{
+    switch (error) {
+    case SR_ERROR_CANT_RESOLVE_HOSTNAME:
+    case SR_ERROR_CONNECT_FAILED:
+    case SR_ERROR_RECV_FAILED:
+    case SR_ERROR_SEND_FAILED:
+    case SR_ERROR_TIMEOUT:
+    case SR_ERROR_NO_TRACK_INFO:
+    case SR_ERROR_SELECT_FAILED:
+    case SR_ERROR_SOCKET_CLOSED:
+    case SR_ERROR_NO_HTTP_HEADER:
+    case SR_ERROR_HTTP_RETRY:
+    case SR_ERROR_HTTP_502_ERROR:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+static BOOL wait_for_retry(RIP_MANAGER_INFO *rmi, guint64 seconds)
+{
+    /* Small waits let stop requests interrupt even a long Retry-After delay. */
+    guint64 ticks = seconds > G_MAXUINT64 / 10 ? G_MAXUINT64 : seconds * 10;
+    for (guint64 tick = 0; tick < ticks; tick++) {
+        if (g_atomic_int_get(&rmi->stopped)) return FALSE;
+        g_usleep(100000);
+    }
+    return !g_atomic_int_get(&rmi->stopped);
+}
+
 static void
 ripthread (void *thread_arg)
 {
@@ -303,31 +334,27 @@ ripthread (void *thread_arg)
 	    callback_post_error (rmi, ret);
 	    continue;
 	}
-	else if ((ret == SR_ERROR_RECV_FAILED || 
-		  ret == SR_ERROR_TIMEOUT || 
-		  ret == SR_ERROR_NO_TRACK_INFO || 
-		  ret == SR_ERROR_SELECT_FAILED) && 
-		 GET_AUTO_RECONNECT (rmi->prefs->flags)) {
-	    /* Try to reconnect */
-	    callback_post_status (rmi, RM_STATUS_RECONNECTING);
-	    while (rmi->started) {
-		socklib_close(&rmi->stream_sock);
-		if (rmi->ep) {
-		    debug_printf ("Close external\n");
-		    close_external (&rmi->ep);
-		}
-		destroy_subsystems (rmi);
-		ret = start_ripping (rmi);
-		if (ret == SR_SUCCESS)
-		    break;
-                if (ret == SR_ERROR_OUTPUT_DIRECTORY_LOCKED) {
+	else if (retryable_error(ret) && GET_AUTO_RECONNECT(rmi->prefs->flags)) {
+            destroy_subsystems(rmi);
+            while (rmi->started && !g_atomic_int_get(&rmi->stopped)) {
+                guint64 delay = MAX(G_GUINT64_CONSTANT(5), rmi->retry_after_seconds);
+                char *reason = g_strdup(errors_get_string(ret));
+                g_strdelimit(reason, "\r\n", ' ');
+                callback_post_status(rmi, RM_STATUS_RECONNECTING);
+                sr_console_printf(stderr, "\nConnection lost: %s. Retrying in %" G_GUINT64_FORMAT " s.\n",
+                                  reason, delay);
+                g_free(reason);
+                if (!wait_for_retry(rmi, delay)) break;
+                ret = start_ripping(rmi);
+                if (ret == SR_SUCCESS) break;
+                destroy_subsystems(rmi);
+                if (!retryable_error(ret)) {
                     callback_post_error(rmi, ret);
                     rmi->started = 0;
                     break;
                 }
-		Sleep(1000);
-	    }
-	    if (!rmi->started) {
+            }
+	    if (!rmi->started || g_atomic_int_get(&rmi->stopped)) {
 		break;
 	    }
 	    /* Fall through */
@@ -407,6 +434,8 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     STREAM_PREFS* prefs = rmi->prefs;
     error_code ret;
 
+    rmi->retry_after_seconds = 0;
+    memset(&rmi->http_info, 0, sizeof(rmi->http_info));
     const char *pproxy = prefs->proxyurl[0] ? prefs->proxyurl : NULL;
     debug_printf ("start_ripping: checkpoint 1\n");
 

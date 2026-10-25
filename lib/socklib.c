@@ -339,6 +339,7 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     unsigned char ip[16];
     char verification_host[MAX_HOST_LEN];
     char *zone;
+    error_code failure = SR_ERROR_TLS_VERIFICATION_FAILED;
     if (!ctx) return SR_ERROR_CONNECT_FAILED;
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     SSL_CTX_set_verify(ctx, prefs->tls_insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
@@ -346,7 +347,7 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     if (prefs->tls_ca_file[0] && !SSL_CTX_load_verify_locations(ctx, prefs->tls_ca_file, NULL)) {
         sr_console_printf(stderr, "Unable to load CA file: %s\n", prefs->tls_ca_file);
         SSL_CTX_free(ctx);
-        return SR_ERROR_CONNECT_FAILED;
+        return SR_ERROR_TLS_VERIFICATION_FAILED;
     }
     if (prefs->tls_insecure) sr_console_printf(stderr, "Warning: --insecure disables certificate and hostname verification.\n");
 #ifdef WIN32
@@ -391,7 +392,19 @@ socklib_start_tls (HSOCKET *socket_handle, const char *host, const STREAM_PREFS 
     } else {
         if (!SSL_set_tlsext_host_name(ssl, host) || !SSL_set1_host(ssl, host)) goto failed;
     }
-    if ((!transport && !SSL_set_fd(ssl, (int)socket_handle->s)) || SSL_connect(ssl) != 1) goto failed;
+    if (!transport && !SSL_set_fd(ssl, (int)socket_handle->s)) goto failed;
+    {
+        int connected = SSL_connect(ssl);
+        if (connected != 1) {
+            int ssl_error = SSL_get_error(ssl, connected);
+            if (SSL_get_verify_result(ssl) == X509_V_OK &&
+                (ssl_error == SSL_ERROR_SYSCALL || ssl_error == SSL_ERROR_ZERO_RETURN ||
+                 (ssl_error == SSL_ERROR_SSL &&
+                  ERR_GET_REASON(ERR_peek_last_error()) == SSL_R_UNEXPECTED_EOF_WHILE_READING)))
+                failure = SR_ERROR_CONNECT_FAILED;
+            goto failed;
+        }
+    }
     debug_printf("TLS connected: %s, %s\n", SSL_get_version(ssl), SSL_get_cipher(ssl));
     BOOL *info_printed = proxy ? &socket_handle->proxy_tls_info_printed : &socket_handle->tls_info_printed;
     if (prefs->tls_info && !*info_printed) {
@@ -415,7 +428,7 @@ failed:
             ERR_peek_last_error() ? ERR_reason_error_string(ERR_peek_last_error()) : "connection closed",
             X509_verify_cert_error_string(SSL_get_verify_result(ssl)));
     socklib_free_tls(socket_handle);
-    return SR_ERROR_CONNECT_FAILED;
+    return failure;
 }
 #endif
 

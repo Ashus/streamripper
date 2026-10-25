@@ -260,6 +260,7 @@ typedef struct SR_HTTP_HEADERst
     int have_icy_name;
     char icy_name[MAX_ICY_STRING];
     int icy_code;
+    guint64 retry_after_seconds;
     int icy_bitrate;
     char icy_genre[MAX_ICY_STRING];
     char icy_url[MAX_ICY_STRING];
@@ -576,6 +577,7 @@ struct RIP_MANAGER_INFOst
     /* Is rip manager active? */
     int started;
     BOOL stopped;
+    guint64 retry_after_seconds;
     HSEM started_sem;
 
     /* Info from stream http header.  It's used for generating relay 

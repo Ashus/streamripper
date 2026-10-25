@@ -16,6 +16,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 #include "sr_compat.h"
 #include "srtypes.h"
 #include "socklib.h"
@@ -29,6 +30,7 @@
 static char* make_auth_header(const char *header_name, 
 			      const char *username, const char *password);
 static char* b64enc(const char *buf, int size);
+static guint64 retry_after_delay(char *header);
 static error_code
 http_get_pls (RIP_MANAGER_INFO* rmi, HSOCKET *sock, SR_HTTP_HEADER *info);
 static error_code
@@ -127,8 +129,9 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	}
 
 	debug_printf("http_sc_connect(): calling http_get_sc_header\n");
-	if ((ret = http_get_sc_header(rmi, url, sock, info)) != SR_SUCCESS)
-	    return ret;
+        ret = http_get_sc_header(rmi, url, sock, info);
+        rmi->retry_after_seconds = info->retry_after_seconds;
+        if (ret != SR_SUCCESS) return ret;
 
 	if (*info->http_location) {
 	    /* RECURSIVE CASE */
@@ -361,6 +364,9 @@ http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
         if (status >= 200 && status < 300) return SR_SUCCESS;
         if (status >= 100 && status < 200 && status != 101) continue;
         fprintf(stderr, "Proxy CONNECT failed (HTTP %d).\n", status);
+        rmi->retry_after_seconds = retry_after_delay(header);
+        if (status == 408 || status == 429 || (status >= 500 && status != 502))
+            return SR_ERROR_HTTP_RETRY;
         switch (status) {
         case 403: return SR_ERROR_HTTP_403_ERROR;
         case 407: return SR_ERROR_HTTP_407_ERROR;
@@ -530,6 +536,35 @@ extract_header_value (char *header, char *dest, char *match, int maxlen)
     return 0;
 }
 
+static guint64 retry_after_delay(char *header)
+{
+    char value[128], *end;
+    guint64 seconds;
+    if (!extract_header_value(header, value, "Retry-After:", sizeof(value))) return 0;
+    errno = 0;
+    seconds = g_ascii_strtoull(value, &end, 10);
+    if (g_ascii_isdigit(value[0]) && !*end && errno != ERANGE) return seconds;
+    {
+        char weekday[4], month[4], zone[4];
+        int day, year, hour, minute, second;
+        const char *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+        if (sscanf(value, "%3s, %d %3s %d %d:%d:%d %3s", weekday, &day, month,
+                   &year, &hour, &minute, &second, zone) == 8 && !strcmp(zone, "GMT")) {
+            for (int i = 0; i < 12; i++) {
+                if (!strncmp(months + i * 3, month, 3)) {
+                    GDateTime *date = g_date_time_new_utc(year, i + 1, day, hour, minute, second);
+                    if (date) {
+                        gint64 delta = g_date_time_to_unix(date) - g_get_real_time() / G_USEC_PER_SEC;
+                        g_date_time_unref(date);
+                        return delta > 0 ? (guint64)delta : 0;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 error_code
 http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
 {
@@ -566,6 +601,9 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     if (!start || sscanf(start + 1, "%d", &info->icy_code) != 1 ||
         info->icy_code < 100 || info->icy_code > 599) return SR_ERROR_NO_RESPONSE_HEADER;
     if (info->icy_code >= 400) {
+        info->retry_after_seconds = retry_after_delay(header);
+        if (info->icy_code == 408 || info->icy_code == 429 ||
+            (info->icy_code >= 500 && info->icy_code != 502)) return SR_ERROR_HTTP_RETRY;
 	switch (info->icy_code) {
 	case 400:
 	    return SR_ERROR_HTTP_400_ERROR;

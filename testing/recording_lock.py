@@ -87,7 +87,7 @@ try:
         owner = start(dest, endpoint="/reconnect")
         lock = await_lock(dest, owner)
         # Reconnect must retain ownership even while the TCP connection is replaced.
-        deadline = time.monotonic() + 6
+        deadline = time.monotonic() + 12
         while requests.count("/reconnect") < 2 and time.monotonic() < deadline:
             time.sleep(0.02)
         assert requests.count("/reconnect") >= 2, requests

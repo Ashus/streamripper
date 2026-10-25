@@ -123,6 +123,8 @@ errors_init (void)
     SET_ERR_STR("SR_ERROR_CANT_CREATE_SOCKET",                  0x42);
     SET_ERR_STR("SR_ERROR_CREATE_PIPE_FAILED",                  0x43);
     SET_ERR_STR("Unable to acquire the recording directory lock", 0x45);
+    SET_ERR_STR("TLS certificate verification or trust configuration failed", 0x46);
+    SET_ERR_STR("Temporary HTTP error", 0x47);
 }
 
 char*
