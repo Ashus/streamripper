@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "windows-rider-release",
+      "displayName": "Windows MinGW Release",
+      "generator": "Ninja",
+      "cmakeExecutable": "${sourceDir}/build/toolchain/mingw64/bin/cmake.exe",
+      "binaryDir": "${sourceDir}/build/rider-release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "environment": {
+        "PATH": "${sourceDir}/build/toolchain/mingw64/bin;$penv{PATH}",
+        "PKG_CONFIG_PATH": "${sourceDir}/build/toolchain/mingw64/lib/pkgconfig"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SR_MODERN_WINDOWS": "ON",
+        "CMAKE_C_COMPILER": "${sourceDir}/build/toolchain/mingw64/bin/gcc.exe",
+        "CMAKE_MAKE_PROGRAM": "${sourceDir}/build/toolchain/mingw64/bin/ninja.exe",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/build/toolchain/mingw64"
+      }
+    },
+    {
+      "name": "windows-rider-debug",
+      "displayName": "Windows MinGW Debug",
+      "inherits": "windows-rider-release",
+      "binaryDir": "${sourceDir}/build/rider-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-rider-release",
+      "configurePreset": "windows-rider-release"
+    },
+    {
+      "name": "windows-rider-debug",
+      "configurePreset": "windows-rider-debug"
+    }
+  ]
+}
