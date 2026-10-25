@@ -292,7 +292,7 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    print_to_console ("meta interval: %d\n",
 			      rmi->meta_interval);
 	}
-	if (GET_MAKE_RELAY(prefs->flags)) {
+	if (rmi->relaylib_info.m_running) {
             if (prefs->relay_ip[0]) {
                 print_to_console(strchr(prefs->relay_ip, ':') ? "relay: [%s]:%u\n" : "relay: %s:%u\n",
                                  prefs->relay_ip, prefs->relay_port);
@@ -414,6 +414,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "--xs-silence-length=MSEC", "Set the expected silence length");
     fputs("\nRelay:\n", stream);
     print_usage_option(stream, "-r, --relay [[IP:]PORT]", "Enable the relay (default port: 8000)");
+    print_usage_option(stream, "", "HLS/FLAC: ignored with a warning");
     print_usage_option(stream, "", "IPv6 bind: [ADDRESS]:PORT");
     print_usage_option(stream, "-R, --max-relay-clients COUNT", "Max relay clients (default: 1; 0=all)");
     print_usage_option(stream, "-L, --relay-playlist FILE", "Write a relay playlist");

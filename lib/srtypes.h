@@ -560,6 +560,7 @@ struct RIP_MANAGER_INFOst
     STREAM_PREFS *prefs;
     struct stream_capture *capture;
     BOOL flac_in_ogg;
+    BOOL relay_skip_warned;
     char streamname[MAX_STREAMNAME_LEN];
     char server_name[MAX_SERVER_LEN];
     char stream_host[MAX_URL_LEN];

@@ -469,6 +469,11 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     rmi->flac_in_ogg = FALSE;
     ret = stream_capture_prepare(rmi);
     if (ret != SR_SUCCESS) goto RETURN_ERR;
+    if (rmi->capture && GET_MAKE_RELAY(prefs->flags) && !rmi->relay_skip_warned) {
+        sr_console_printf(stderr, "Warning: relay is unavailable for %s; recording will continue without a relay.\n",
+                          stream_capture_is_hls(rmi) ? "HLS" : "FLAC");
+        rmi->relay_skip_warned = TRUE;
+    }
 
     /* If the icy_name exists, but is empty, set to a bogus name so 
        that we can create the directory correctly, etc. */
@@ -534,7 +539,7 @@ start_ripping (RIP_MANAGER_INFO* rmi)
 
     /* Launch relay server threads */
     debug_printf ("start_ripping: checkpoint 3\n");
-    if (GET_MAKE_RELAY (rmi->prefs->flags)) {
+    if (GET_MAKE_RELAY(rmi->prefs->flags) && !rmi->capture) {
 	u_short new_port = 0;
 	ret = relaylib_start (rmi, 
 			      GET_SEARCH_PORTS(rmi->prefs->flags), 

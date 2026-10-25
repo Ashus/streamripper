@@ -5,6 +5,7 @@ import argparse
 import collections
 import hashlib
 import http.server
+import socket
 import ssl
 import struct
 import subprocess
@@ -245,7 +246,22 @@ def main():
         record('packed AAC', '/aac.m3u8', packed * 2, '.aac')
         record('short IV', '/shortiv.m3u8', packets[0], '.ts')
         # Reconnect retries the same partial segment without appending its prefix.
-        record('retry', '/retry.m3u8', packets[0] + packets[1], '.ts')
+        with socket.socket() as occupied:
+            occupied.bind(('127.0.0.1', 0))
+            occupied.listen()
+            relay_options = [f'--relay=127.0.0.1:{occupied.getsockname()[1]}', '--no-port-scan',
+                             '--max-relay-clients=10', '--metadata-log', '--user-agent=WinampMPEG/5.0',
+                             '--incomplete-min-duration=15m',
+                             '--relay-playlist=' + str(root / 'disabled.pls')]
+            log = record('ignored HLS relay', '/high.m3u8', packets[1], '.ts', relay_options,
+                         diagnostic='relay is unavailable for HLS')
+            assert 'relay port:' not in log and '\nrelay: ' not in log, log
+            log = record('ignored FLAC relay', '/native.flac', native, '.flac', relay_options,
+                         diagnostic='relay is unavailable for FLAC')
+            assert 'relay port:' not in log and '\nrelay: ' not in log, log
+            log = record('retry', '/retry.m3u8', packets[0] + packets[1], '.ts', relay_options)
+            assert log.count('relay is unavailable for HLS') == 1, log
+            assert not (root / 'disabled.pls').exists()
         assert counts['/retry.ts'] == 2
         attempts = [stamp for path, stamp in requests if path == '/retry.ts']
         assert attempts[1] - attempts[0] >= 4.8
@@ -267,7 +283,9 @@ def main():
         record('interrupted FLAC', '/live.flac', native, '.flac', ['-l', '1', '--incomplete-min-duration=15m'], incomplete=True)
         record('short HLS', '/endless.m3u8', None, '.ts', ['-l', '1', '--incomplete-min-duration=15m'], diagnostic='Discarded incomplete recording')
         record('rules rejected', '/native.flac', None, '.flac', ['-w', str(root / 'rules.txt')],
-               diagnostic='relay and metadata rules')
+               diagnostic='--metadata-rules is unavailable')
+        record('external metadata rejected', '/high.m3u8', None, '.ts', ['--external-metadata=must-not-run'],
+               diagnostic='--external-metadata is unavailable')
         for instance in (server, tls):
             instance.shutdown()
             instance.server_close()

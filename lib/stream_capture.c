@@ -345,9 +345,10 @@ error_code stream_capture_prepare(RIP_MANAGER_INFO *rmi)
     }
     int type = rmi->http_info.content_type;
     if (type != CONTENT_TYPE_FLAC && type != CONTENT_TYPE_HLS) return SR_SUCCESS;
-    if (GET_MAKE_RELAY(rmi->prefs->flags) || rmi->prefs->rules_file[0] ||
-        GET_EXTERNAL_CMD(rmi->prefs->flags))
-        return invalid("HLS/FLAC record a whole stream; relay and metadata rules are unavailable");
+    if (rmi->prefs->rules_file[0])
+        return invalid("--metadata-rules is unavailable for whole-stream HLS/FLAC recording");
+    if (GET_EXTERNAL_CMD(rmi->prefs->flags))
+        return invalid("--external-metadata is unavailable for whole-stream HLS/FLAC recording");
     struct stream_capture *state = g_new0(struct stream_capture, 1);
     rmi->capture = state;
     state->writer.m_file = INVALID_FHANDLE;
