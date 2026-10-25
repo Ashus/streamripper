@@ -21,6 +21,8 @@ python testing\recording_lock.py
 if errorlevel 1 goto failed
 python testing\metadata_filter.py
 if errorlevel 1 goto failed
+python testing\station_names.py dist\streamripper.exe
+if errorlevel 1 goto failed
 python testing\live_updates.py dist\streamripper.exe
 if errorlevel 1 goto failed
 python testing\stream_capture.py dist\streamripper.exe "%SR_TOOLCHAIN%\bin\openssl.exe"

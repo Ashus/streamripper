@@ -279,12 +279,16 @@ print_status (RIP_MANAGER_INFO *rmi)
 			
     }
     if (!printed_fullinfo) {
+        mchar station_name[SR_MAX_PATH];
+        /* ICY header values use the same encoding policy as track metadata. */
+        gstring_from_string(rmi, station_name, sizeof(station_name),
+                            rmi->streamname, CODESET_METADATA);
 	print_to_console ("host: %s\n"
 			  "server name: %s\n"
 			  "stream: %s\n",
 			  rmi->stream_host,
 			  rmi->server_name,
-			  rmi->http_info.have_icy_name ? rmi->streamname : "Unknown station");
+			  rmi->http_info.have_icy_name ? station_name : "Unknown station");
 	const char *format;
 	switch (rmi->http_info.content_type) {
 	case CONTENT_TYPE_MP3: format = "MP3"; break;
