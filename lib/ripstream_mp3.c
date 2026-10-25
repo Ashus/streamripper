@@ -573,15 +573,29 @@ find_sep (RIP_MANAGER_INFO* rmi,
     if (rmi->http_info.content_type == CONTENT_TYPE_AAC) {
         unsigned char *buf = g_malloc(rw_size);
         size_t boundary = rw_size / 2;
+        u_long previous, next;
         rc = cbuf3_peek(cbuf3, (char *)buf, &rw_start, rw_size);
         if (rc == SR_SUCCESS)
             framed_audio_adts_boundary(buf, rw_size, boundary, &boundary);
+        previous = next = boundary;
+        if (rc == SR_SUCCESS && sp_opt->xs != 0) {
+            /* Like the reviewed FAAD2 port, AAC uses the standard search even
+               with --xs2. Compressed frames are never decoded for output. */
+            error_code analysis = findsep_silence_aac((char *)buf, rw_size,
+                rmi->rw_start_to_sw_start,
+                sp_opt->xs_search_window_1 + sp_opt->xs_search_window_2,
+                sp_opt->xs_silence_length, sp_opt->xs_padding_1,
+                sp_opt->xs_padding_2, &previous, &next);
+            if (analysis != SR_SUCCESS)
+                debug_printf("AAC silence search unavailable; keeping ADTS metadata boundary\n");
+        }
         g_free(buf);
         if (rc != SR_SUCCESS) return rc;
         /* End pointers are exclusive: adjacent tracks share the same boundary. */
-        rc = cbuf3_pointer_add(cbuf3, end_of_previous, &rw_start, boundary);
+        rc = cbuf3_pointer_add(cbuf3, end_of_previous, &rw_start, previous);
         if (rc != SR_SUCCESS) return rc;
-        *start_of_next = *end_of_previous;
+        rc = cbuf3_pointer_add(cbuf3, start_of_next, &rw_start, next);
+        if (rc != SR_SUCCESS) return rc;
     } else if (rmi->http_info.content_type != CONTENT_TYPE_MP3) {
 	long midpoint = rw_size / 2;
 	debug_printf ("(not mp3) taking middle: sw_sil=%d\n", midpoint);

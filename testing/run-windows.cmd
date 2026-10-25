@@ -31,6 +31,8 @@ python testing\metadata_encoding.py
 if errorlevel 1 goto failed
 python testing\audio_headers.py
 if errorlevel 1 goto failed
+python testing\aac_silence.py dist\streamripper.exe build\aac_silence_regression.exe --faac "%SR_TOOLCHAIN%\bin\faac.exe"
+if errorlevel 1 goto failed
 python testing\incomplete_duration.py
 if errorlevel 1 goto failed
 python testing\silence_output.py build\core_regression.exe build\sample-5s.mp3 "%SR_TOOLCHAIN%\bin"

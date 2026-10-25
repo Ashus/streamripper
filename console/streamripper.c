@@ -432,9 +432,10 @@ print_usage (FILE* stream)
     print_usage_option(stream, "-i, --no-id3", "Disable both ID3v1 and ID3v2 tags");
     print_usage_option(stream, "--with-id3v1", "Enable ID3v1 tags");
     print_usage_option(stream, "--without-id3v2", "Disable ID3v2 tags");
-    fputs("\nMP3 split points (times are in milliseconds):\n", stream);
+    fputs("\nMP3/AAC split points (times are in milliseconds):\n", stream);
     print_usage_option(stream, "--xs-none", "Disable silence searching");
     print_usage_option(stream, "--xs2", "Use the alternative silence detector");
+    print_usage_option(stream, "", "MP3 only; AAC uses standard detection");
     print_usage_option(stream, "--xs-offset=MSEC", "Shift the split relative to metadata");
     print_usage_option(stream, "--xs-padding=PREV:NEXT", "Pad previous/next recordings");
     print_usage_option(stream, "--xs-search-window=BEFORE:AFTER", "Set the silence search window");

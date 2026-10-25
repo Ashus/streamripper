@@ -46,4 +46,11 @@ findsep_silence_2 (const char* mpgbuf,
 error_code
 find_bitrate (unsigned long* bitrate, const char* mpgbuf, long mpgsize);
 
+/* Exclusive ADTS boundaries; decoding failure lets the caller retain its
+   frame-aligned metadata boundary. Uses the standard silence search. */
+error_code findsep_silence_aac(const char *buffer, long size, long search_start,
+                             long search_length, long silence_length,
+                             long padding1, long padding2,
+                             u_long *end_previous, u_long *start_next);
+
 #endif //__FINDSEP_H__

@@ -27,6 +27,8 @@
 #include <math.h>
 #include <assert.h>
 #include "mad.h"
+#include <neaacdec.h>
+#include <limits.h>
 #include "findsep.h"
 #include "srtypes.h"
 #include "debug.h"
@@ -241,6 +243,135 @@ findsep_silence (const char* mpgbuf,
     free_frame_list (&ds);
 
     return SR_SUCCESS;
+}
+
+
+/* AAC analysis follows Jakub Kaprzyk's FAAD2/frame-to-PCM approach:
+ * https://github.com/jaakristioja/streamripper
+ * commit 7bbfb7d6a01095c64e304cdd7c3eb3f5efa2482a.
+ * This adaptation validates ADTS extents, preserves the caller's fallback on
+ * decode errors, uses all channel energies, and returns exclusive boundaries.
+ */
+error_code
+findsep_silence_aac(const char *buffer, long size, long search_start,
+                   long search_length, long silence_length,
+                   long padding1, long padding2,
+                   u_long *end_previous, u_long *start_next)
+{
+    DECODE_STRUCT ds = {0};
+    NeAACDecHandle decoder;
+    NeAACDecConfigurationPtr config;
+    const unsigned char *bytes = (const unsigned char *)buffer;
+    long offset = 0;
+    unsigned long rate = 0;
+    unsigned char channels = 0;
+    BOOL initialized = FALSE;
+    error_code result = SR_ERROR_DECODE_FAILURE;
+    unsigned long split = 0;
+
+    if (size < 7 || search_length <= 0 || silence_length <= 0)
+        return result;
+    ds.mpgbuf = (unsigned char *)buffer;
+    ds.mpgsize = size;
+    ds.len_to_sw_ms = MAX(0, search_start);
+    ds.searchwindow_ms = search_length;
+    ds.silence_ms = silence_length;
+    INIT_LIST_HEAD(&ds.frame_list);
+    init_siltrackers(ds.siltrackers);
+    decoder = NeAACDecOpen();
+    if (!decoder) return result;
+    config = NeAACDecGetCurrentConfiguration(decoder);
+    if (!config) goto done;
+    config->outputFormat = FAAD_FMT_16BIT;
+    if (!NeAACDecSetConfiguration(decoder, config)) goto done;
+
+    while (offset + 7 <= size) {
+        const unsigned char *frame = bytes + offset;
+        unsigned long length, samples;
+        NeAACDecFrameInfo info = {0};
+        const short *pcm;
+        FRAME_LIST *entry;
+        /* Validate the entire ADTS frame before handing it to the decoder. */
+        if (frame[0] != 0xff || (frame[1] & 0xf6) != 0xf0 ||
+            ((frame[2] >> 2) & 15) >= 13) {
+            if (initialized) goto done;
+            offset++;
+            continue;
+        }
+        length = ((frame[3] & 3) << 11) | (frame[4] << 3) | (frame[5] >> 5);
+        if (length < ((frame[1] & 1) ? 7u : 9u)) {
+            if (initialized) goto done;
+            offset++;
+            continue;
+        }
+        if (length > (unsigned long)(size - offset)) break; /* Partial final frame. */
+        if (!initialized) {
+            long consumed = NeAACDecInit(decoder, (unsigned char *)frame,
+                                        length, &rate, &channels);
+            if (consumed < 0 || consumed != 0) goto done;
+            initialized = TRUE;
+        }
+        pcm = NeAACDecDecode(decoder, &info, (unsigned char *)frame, length);
+        if (info.error || info.bytesconsumed != length) goto done;
+        if (!info.samples) { offset += length; continue; } /* Decoder priming. */
+        if (!pcm || !info.channels || info.channels > 64 || info.samples % info.channels ||
+            !info.samplerate || info.samplerate > 384000 ||
+            info.samples > 8192u * info.channels) goto done;
+        if (ds.samplerate && ds.samplerate != (long)info.samplerate) goto done;
+        if (!ds.samplerate) {
+            /* HE-AAC/SBR may double the ADTS core rate. Use decoded PCM rate. */
+            ds.samplerate = info.samplerate;
+            if (((gint64)ds.len_to_sw_ms + search_length) * ds.samplerate / 1000 > LONG_MAX ||
+                (gint64)silence_length * ds.samplerate / 1000 > LONG_MAX) goto done;
+            ds.silence_samples = (gint64)silence_length * ds.samplerate / 1000;
+            ds.len_to_sw_start_samp = (gint64)ds.len_to_sw_ms * ds.samplerate / 1000;
+            ds.len_to_sw_end_samp = ((gint64)ds.len_to_sw_ms + search_length)
+                                    * ds.samplerate / 1000;
+        }
+        samples = info.samples / info.channels;
+        if (ds.pcmpos > LONG_MAX - (long)samples) goto done;
+        entry = g_new0(FRAME_LIST, 1);
+        entry->m_framepos = frame;
+        entry->m_samples = samples;
+        entry->m_pcmpos = ds.pcmpos;
+        list_add_tail(&entry->m_list, &ds.frame_list);
+        for (unsigned long i = 0; i < samples; i++) {
+            double energy = 0;
+            for (unsigned int channel = 0; channel < info.channels; channel++) {
+                double sample = pcm[i * info.channels + channel];
+                energy += sample * sample;
+            }
+            /* Energy mixing avoids treating opposite-phase stereo as silence. */
+            double volume = sqrt(energy / info.channels);
+            if (ds.pcmpos >= ds.len_to_sw_start_samp &&
+                ds.pcmpos < ds.len_to_sw_end_samp)
+                search_for_silence(&ds, volume);
+            ds.pcmpos++;
+        }
+        offset += length;
+    }
+    if (ds.frame_list.next == &ds.frame_list) goto done;
+    for (int i = 0; i < NUM_SILTRACKERS; i++) {
+        if (ds.siltrackers[i].foundsil) {
+            split = ds.siltrackers[i].silstart_samp + ds.silence_samples / 2;
+            gint64 end_sample = split + (gint64)padding1 * ds.samplerate / 1000;
+            gint64 start_sample = split - (gint64)padding2 * ds.samplerate / 1000;
+            FRAME_LIST *entry;
+            *end_previous = *start_next = 0;
+            list_for_each_entry(entry, FRAME_LIST, &ds.frame_list, m_list) {
+                if (end_sample >= entry->m_pcmpos)
+                    *end_previous = entry->m_framepos - bytes;
+                if (start_sample >= entry->m_pcmpos)
+                    *start_next = entry->m_framepos - bytes;
+            }
+            result = SR_SUCCESS;
+            break;
+        }
+    }
+done:
+    free_frame_list(&ds);
+    NeAACDecClose(decoder);
+    return result;
 }
 
 static void 

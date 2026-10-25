@@ -28,6 +28,8 @@ def package(dest):
         assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, relative
         entries[relative] = digest
     assert 'streamripper.exe' in entries and 'libvorbis-0.dll' in entries
+    assert 'libfaad-2.dll' in entries
+    assert 'licenses/faad2/COPYING' in entries and 'licenses/faad2/NOTICE' in entries
     assert 'licenses/libvorbis/COPYING' in entries
     for name in ('METADATA-RULES.md', 'BUILDING-WINDOWS.md', 'BUILDING-LINUX.md',
                  'parse_rules.txt', 'advert_rules.txt'):

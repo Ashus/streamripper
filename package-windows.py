@@ -23,7 +23,7 @@ if dest == repo or dest == prefix or dest in repo.parents or dest in prefix.pare
     raise ValueError('The package directory must not be a source or toolchain root.')
 release = repo / 'build' / 'release'
 release.mkdir(parents=True, exist_ok=True)
-modules = {'glib2': 'glib-2.0', 'libmad': 'mad', 'libogg': 'ogg', 'libvorbis': 'vorbis',
+modules = {'glib2': 'glib-2.0', 'libmad': 'mad', 'faad2': 'faad2', 'libogg': 'ogg', 'libvorbis': 'vorbis',
            'openssl': 'openssl', 'pcre2': 'libpcre2-8', 'gettext-runtime': 'libintl', 'libiconv': 'iconv'}
 env = os.environ.copy()
 env['PATH'] = str(prefix / 'bin') + os.pathsep + env.get('PATH', '')
@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=release) as temporary:
         source = prefix / 'share' / 'licenses' / name
         if source.is_dir():
             shutil.copytree(source, stage / 'licenses' / name)
-        elif name not in ('libmad', 'libvorbis'):
+        elif name not in ('libmad', 'libvorbis', 'faad2'):
             raise FileNotFoundError(f'Missing license directory: {source}')
     shutil.copytree(repo / 'third_party' / 'licenses', stage / 'licenses', dirs_exist_ok=True)
     (stage / 'licenses' / 'libmad').mkdir(exist_ok=True)
