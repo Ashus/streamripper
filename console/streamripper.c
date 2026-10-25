@@ -67,6 +67,9 @@ static BOOL			m_alldone = FALSE;
 static volatile sig_atomic_t m_got_sig = FALSE;
 static BOOL			m_dont_print = FALSE;
 static BOOL			m_print_stderr = FALSE;
+static const char m_version_banner[] =
+    "Streamripper " SRVERSION " (built: " __DATE__ " " __TIME__ ")\n"
+    "https://github.com/Ashus/streamripper\n";
 static int                      m_exit_code = EXIT_SUCCESS;
 time_t				m_stop_time = 0;
 
@@ -375,6 +378,8 @@ print_usage_option(FILE *stream, const char *option, const char *description)
 static void
 print_usage (FILE* stream)
 {
+    fputs(m_version_banner, stream);
+    fputc('\n', stream);
     fputs("Usage: streamripper URL [OPTIONS]\n", stream);
     fputs("Short-option aliases accept --name VALUE or --name=VALUE.\n", stream);
     fputs("\nGeneral:\n", stream);
@@ -739,7 +744,7 @@ g_strlcpy(prefs->proxyurl, argument, MAX_URL_LEN);
 g_strlcpy(prefs->useragent, argument, MAX_USERAGENT_STR);
 	    break;
 	case 'v':
-	    printf("Streamripper %s\n", SRVERSION);
+	    fputs(m_version_banner, stdout);
 	    exit(0);
 	case 'w':
 g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
@@ -779,7 +784,7 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
 
     /* Version */
     if (!strcmp(rule,"version")) {
-	printf("Streamripper %s\n", SRVERSION);
+	fputs(m_version_banner, stdout);
 	exit(0);
     }
 

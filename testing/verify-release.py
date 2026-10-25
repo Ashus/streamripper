@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix='verify-release-', dir=archive.parent) a
     version = (dest / 'VERSION').read_text().strip()
     assert json.loads((dest / 'build-info.json').read_text())['version'] == version
     output = subprocess.check_output([str(dest / 'streamripper.exe'), '--version'], text=True).strip()
-    assert output == 'Streamripper ' + version, output
+    assert output.split()[:2] == ['Streamripper', version], output
+    assert output.splitlines()[1] == 'https://github.com/Ashus/streamripper', output
     print('Verified:', archive.name, 'files:', len(actual), 'version:', version)
 print('Archive and all packaged file checksums passed.')

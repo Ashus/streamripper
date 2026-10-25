@@ -32,7 +32,7 @@ version = (repo / 'VERSION').read_text().strip()
 if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', version):
     raise ValueError('VERSION must contain a valid numeric release version.')
 reported = subprocess.check_output([str(repo / 'build' / 'streamripper.exe'), '--version'], env=env, text=True).strip()
-if reported != 'Streamripper ' + version:
+if reported.split()[:2] != ['Streamripper', version]:
     raise RuntimeError('Rebuild first: executable version does not match VERSION.')
 
 with tempfile.TemporaryDirectory(prefix='package-', dir=release) as temporary:

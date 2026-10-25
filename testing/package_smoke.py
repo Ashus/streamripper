@@ -35,7 +35,8 @@ def package(dest):
         assert (dest / name).read_bytes() == (repo / name).read_bytes()
     assert (dest / 'licenses/libvorbis/COPYING').read_bytes() == (repo / 'third_party/licenses/libvorbis/COPYING').read_bytes()
     output = subprocess.check_output([str(dest / 'streamripper.exe'), '--version'], cwd=dest, text=True)
-    assert output.strip() == 'Streamripper ' + (repo / 'VERSION').read_text().strip()
+    assert output.split()[:2] == ['Streamripper', (repo / 'VERSION').read_text().strip()]
+    assert output.splitlines()[1] == 'https://github.com/Ashus/streamripper'
     return entries
 
 with tempfile.TemporaryDirectory(prefix='packaging-test-', dir=repo / 'build') as temporary:
