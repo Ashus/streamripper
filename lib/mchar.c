@@ -436,9 +436,16 @@ gstring_from_string (RIP_MANAGER_INFO* rmi, mchar* m, int mlen,
 	    if (!g_ascii_strcasecmp(src_codeset, "AUTO")) {
                 /* ICY servers often send UTF-8 without declaring a charset.
                    Detect each update independently; never reinterpret an
-                   explicitly selected encoding. Legacy bytes use the locale. */
+                   explicitly selected encoding. Icecast MP3/AAC defaults to
+                   Latin-1; other legacy bytes use the locale. */
                 if (g_utf8_validate(c, -1, NULL)) {
                     src_codeset = "UTF-8";
+                } else if ((rmi->http_info.content_type == CONTENT_TYPE_MP3 ||
+                            rmi->http_info.content_type == CONTENT_TYPE_AAC) &&
+                           !g_ascii_strncasecmp(rmi->http_info.server, "Icecast", 7) &&
+                           (!rmi->http_info.server[7] || rmi->http_info.server[7] == '/' ||
+                            g_ascii_isspace(rmi->http_info.server[7]))) {
+                    src_codeset = "ISO-8859-1";
                 } else {
                     src_codeset = (char *) default_codeset();
                     if (!g_ascii_strcasecmp(src_codeset, "UTF-8"))
