@@ -17,6 +17,28 @@ int main(void)
     size_t i;
     const char *title = "Mirar - N\xc3\xa4r Solen G\xc3\xa5r Ned";
     const WCHAR expected[] = L"Mirar - N\u00e4r Solen G\u00e5r Ned";
+    {
+        FILE *capture = tmpfile();
+        long first;
+        if (!capture) return 13;
+        sr_console_status(capture, "ripping...", "Track", "00:01");
+        first = ftell(capture);
+        sr_console_status(capture, "ripping...", "Track", "00:01");
+        if (ftell(capture) != first) return 14;
+        sr_console_status(capture, "ripping...", "Track", "00:02");
+        if (ftell(capture) <= first) return 15;
+        first = ftell(capture);
+        sr_console_status(capture, "filtered...", "Track", "00:02");
+        if (ftell(capture) <= first) return 16;
+        first = ftell(capture);
+        sr_console_status(capture, "filtered...", "Next track", "00:02");
+        if (ftell(capture) <= first) return 17;
+        sr_console_printf(capture, "\n");
+        first = ftell(capture);
+        sr_console_status(capture, "filtered...", "Next track", "00:02");
+        if (ftell(capture) <= first) return 18;
+        fclose(capture);
+    }
     setlocale(LC_ALL, ".1250");
     for (i = 0; i < G_N_ELEMENTS(pages); i++) {
         SetConsoleOutputCP(pages[i]);

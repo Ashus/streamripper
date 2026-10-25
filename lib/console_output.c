@@ -9,6 +9,8 @@
 #include <sys/ioctl.h>
 #endif
 
+static guint64 console_write_generation;
+
 static int console_columns(FILE *stream)
 {
 #ifdef WIN32
@@ -46,11 +48,24 @@ static char *fit_columns(const char *text, int budget, int *columns)
 
 void sr_console_status(FILE *stream, const char *status, const char *title, const char *detail)
 {
+    static char *previous_line;
+    static FILE *previous_stream;
+    static int previous_columns;
+    static guint64 previous_generation;
     int columns = console_columns(stream), used;
     char *suffix = detail ? g_strdup_printf(" [%8s]", detail) : g_strdup("");
     int budget = columns ? MAX(0, columns - 1 - 17 - (int)strlen(suffix)) : 50;
     char *name = fit_columns(title, budget, &used);
     char *line = g_strdup_printf("[%14s] %s%s", status, name, suffix);
+    /* Data callbacks can repeat within the same displayed second. */
+    if (previous_stream == stream && previous_columns == columns &&
+        previous_generation == console_write_generation &&
+        g_strcmp0(previous_line, line) == 0) {
+        g_free(line);
+        g_free(name);
+        g_free(suffix);
+        return;
+    }
     if (columns) {
         char *fitted = fit_columns(line, columns - 1, &used);
         /* Erase through the last column without triggering automatic wrapping. */
@@ -72,7 +87,11 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
     } else {
         sr_console_printf(stream, "%s\r", line);
     }
-    g_free(line);
+    g_free(previous_line);
+    previous_line = line;
+    previous_stream = stream;
+    previous_columns = columns;
+    previous_generation = console_write_generation;
     g_free(name);
     g_free(suffix);
 }
@@ -81,6 +100,8 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
 int
 sr_console_vprintf(FILE *stream, const char *format, va_list args)
 {
+    /* A message or track separator requires the next status to be redrawn. */
+    console_write_generation++;
     char *text = g_strdup_vprintf(format, args);
     size_t length = strlen(text);
     int result = -1;
