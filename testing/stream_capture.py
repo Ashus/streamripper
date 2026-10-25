@@ -264,6 +264,10 @@ def main():
             assert result.returncode == 0, (label, log)
             if diagnostic:
                 assert diagnostic in log, (label, log)
+            if expected is not None:
+                format_name = {'.ts': 'HLS (MPEG-TS)', '.aac': 'AAC (ADTS, HLS)',
+                               '.flac': 'FLAC', '.oga': 'FLAC (Ogg)'}[extension]
+                assert 'format: ' + format_name in log.splitlines(), (label, log)
             files = list(output.rglob('*' + extension))
             if expected is None:
                 assert not files, (label, files, log)

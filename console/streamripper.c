@@ -43,6 +43,7 @@
 #include "filelib.h"
 #include "debug.h"
 #include "console_output.h"
+#include "stream_capture.h"
 
 /*****************************************************************************
  * Private functions
@@ -284,6 +285,23 @@ print_status (RIP_MANAGER_INFO *rmi)
 			  rmi->stream_host,
 			  rmi->server_name,
 			  rmi->http_info.have_icy_name ? rmi->streamname : "Unknown station");
+	const char *format;
+	switch (rmi->http_info.content_type) {
+	case CONTENT_TYPE_MP3: format = "MP3"; break;
+	case CONTENT_TYPE_AAC: format = "AAC (ADTS)"; break;
+	case CONTENT_TYPE_OGG: format = "Vorbis (Ogg)"; break;
+	case CONTENT_TYPE_FLAC:
+	    format = rmi->flac_in_ogg ? "FLAC (Ogg)" : "FLAC";
+	    break;
+	case CONTENT_TYPE_HLS:
+	    format = stream_capture_file_type(rmi) == CONTENT_TYPE_AAC
+	        ? "AAC (ADTS, HLS)" : "HLS (MPEG-TS)";
+	    break;
+	case CONTENT_TYPE_NSV: format = "NSV"; break;
+	case CONTENT_TYPE_ULTRAVOX: format = "Ultravox"; break;
+	default: format = "unknown"; break;
+	}
+	print_to_console("format: %s\n", format);
 	if (rmi->http_bitrate > 0) {
 	    print_to_console ("declared bitrate: %d\n",
 			      rmi->http_bitrate);
