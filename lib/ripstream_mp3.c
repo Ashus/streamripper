@@ -132,6 +132,16 @@ ripstream_mp3_rip (RIP_MANAGER_INFO* rmi)
 	if (rc != SR_SUCCESS) return rc;
     }
 
+    /* A rules change must also re-evaluate a title followed by empty ICY blocks. */
+    if (rmi->rules_reloaded && !rmi->ep) {
+        if (rmi->have_last_icy_title) {
+            g_strlcpy(rmi->current_track.raw_metadata, rmi->last_icy_title,
+                      sizeof(rmi->current_track.raw_metadata));
+            rmi->current_track.have_track_info = TRUE;
+        }
+        rmi->rules_reloaded = FALSE;
+    }
+
     /* Get the metadata for the new node */
     if (rmi->ep) {
 	/* If getting metadata from external process, check for update */

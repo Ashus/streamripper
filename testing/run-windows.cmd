@@ -21,6 +21,8 @@ python testing\recording_lock.py
 if errorlevel 1 goto failed
 python testing\metadata_filter.py
 if errorlevel 1 goto failed
+python testing\live_updates.py dist\streamripper.exe
+if errorlevel 1 goto failed
 python testing\metadata_encoding.py
 if errorlevel 1 goto failed
 python testing\audio_headers.py

@@ -399,6 +399,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "", "TIME: seconds, Ns/Nm/Nh; 0 disables");
     fputs("\nMetadata and tags (default: ID3v2.3 on, ID3v1 off):\n", stream);
     print_usage_option(stream, "-w, --metadata-rules FILE", "Read metadata parsing/filter rules");
+    print_usage_option(stream, "--reload-rules", "Reload changed rules every 5 seconds");
     print_usage_option(stream, "-E, --external-metadata COMMAND", "Fetch metadata via an external command");
     print_usage_option(stream, "-i, --no-id3", "Disable both ID3v1 and ID3v2 tags");
     print_usage_option(stream, "--with-id3v1", "Enable ID3v1 tags");
@@ -730,6 +731,10 @@ g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
     }
 
     /* Need to verify that splitpoint rules were sane */
+    if (prefs->reload_rules && (!prefs->rules_file[0] || GET_EXTERNAL_CMD(prefs->flags))) {
+        sr_console_printf(stderr, "--reload-rules requires --metadata-rules FILE and ICY metadata.\n");
+        exit(EXIT_FAILURE);
+    }
     verify_splitpoint_rules (prefs);
     if (prefs->wav) {
         OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 0);
@@ -755,6 +760,10 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
     }
 
     /* Logging options */
+    if (!strcmp(rule, "reload-rules")) {
+        prefs->reload_rules = TRUE;
+        return;
+    }
     if (!strcmp(rule, "metadata-log")) {
         prefs->metadata_log = TRUE;
         return;

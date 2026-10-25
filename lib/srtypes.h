@@ -485,6 +485,7 @@ typedef struct stream_prefs STREAM_PREFS;
 struct stream_prefs
 {
     BOOL metadata_log;
+    BOOL reload_rules;
     guint64 incomplete_min_duration_ms;
     BOOL tls_insecure;
     BOOL http10;
@@ -662,6 +663,12 @@ struct RIP_MANAGER_INFOst
 
     /* Private data used by parse.c */
     Parse_Rule* parse_rules;
+    gint64 rules_next_check;
+    gint64 rules_mtime;
+    gint64 rules_size;
+    BOOL rules_reloaded;
+    BOOL have_last_icy_title;
+    char last_icy_title[MAX_TRACK_LEN];
 
 #if OGG_VORBIS_FOUND
     /* Ogg state, used by ripogg.c */

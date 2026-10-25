@@ -452,6 +452,7 @@ prefs_get_stream_defaults (STREAM_PREFS* prefs)
 {
     prefs->incomplete_min_duration_ms = 0;
     prefs->metadata_log = FALSE;
+    prefs->reload_rules = FALSE;
     prefs->tls_insecure = FALSE;
     prefs->http10 = FALSE;
     prefs->ip_version = 0;

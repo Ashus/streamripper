@@ -146,7 +146,17 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
     /* Initialize the parsing rules */
     /* GCS FIX: parser_free() would need to be freed by the caller.  
        But he has no cleanup routine to call! */
-    init_metadata_parser (rmi, prefs->rules_file);
+    if (!init_metadata_parser(rmi, prefs->rules_file)) {
+        parser_free(rmi);
+        threadlib_destroy_sem(&rmi->started_sem);
+#if __UNIX__
+        close(rmi->abort_pipe[0]);
+        close(rmi->abort_pipe[1]);
+#endif
+        free(rmi);
+        *rmip = NULL;
+        return SR_ERROR_INVALID_METADATA;
+    }
 
     /* Start the ripping thread */
     debug_printf ("Pre ripthread: %s\n", rmi->prefs->url);
@@ -269,6 +279,7 @@ ripthread (void *thread_arg)
     threadlib_signal_sem(&rmi->started_sem);
 
     while (TRUE) {
+        parser_poll_rules(rmi);
 	debug_printf ("Gonna ripstream_rip\n");
         ret = ripstream_rip(rmi);
 	debug_printf ("Did ripstream_rip\n");

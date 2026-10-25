@@ -69,6 +69,8 @@ ripstream_init (RIP_MANAGER_INFO* rmi)
     debug_printf ("RIPSTREAM_INIT\n");
 
     rmi->track_count = 0;
+    rmi->have_last_icy_title = FALSE;
+    rmi->rules_reloaded = FALSE;
     /* GCS RMK: Ripchunk_size is the metaint size, or default size
        if stream doesn't have meta data */
     rmi->cue_sheet_bytes = 0;
@@ -178,6 +180,8 @@ ripstream_get_data (RIP_MANAGER_INFO* rmi, char *data_buf, char *track_buf)
 	}
 
 	strncpy(track_buf, newtrack, MAX_TRACK_LEN);
+        g_strlcpy(rmi->last_icy_title, newtrack, sizeof(rmi->last_icy_title));
+        rmi->have_last_icy_title = TRUE;
 	rmi->current_track.have_track_info = 1;
     }
     return SR_SUCCESS;

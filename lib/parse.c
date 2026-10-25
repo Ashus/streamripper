@@ -25,6 +25,8 @@
 #include "debug.h"
 #include "srtypes.h"
 #include "filelib.h"
+#include "parse.h"
+#include "console_output.h"
 
 /*****************************************************************************
  * Private global variables
@@ -282,22 +284,30 @@ parse_escaped_string (char* outbuf, char* inbuf)
 
 /* This mega-function reads in the rules file, and loads 
     all the rules into the rmi->parse_rules data structure */
-void
-init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
+static BOOL
+load_metadata_rules (RIP_MANAGER_INFO* rmi, const char* rules_file, BOOL strict)
 {
-    FILE* fp;
+    gchar *contents, **lines;
+    gsize length;
+    int line_number = 0;
+    BOOL valid = TRUE;
     int ri;     /* Rule index */
     int rn;     /* Number of rules allocated */
 
     if (!rules_file || !*rules_file) {
 	use_default_rules (rmi);
-	return;
+	return TRUE;
     }
-    fp = g_fopen (rules_file, "r");
-    if (!fp) {
-	use_default_rules (rmi);
-	return;
+    if (!g_file_get_contents(rules_file, &contents, &length, NULL)) {
+        if (strict) return FALSE;
+        use_default_rules(rmi);
+        return TRUE;
     }
+    if (strict && (!g_utf8_validate(contents, length, NULL) || memchr(contents, 0, length))) {
+        g_free(contents);
+        return FALSE;
+    }
+    lines = g_strsplit(contents, "\n", -1);
 
     rmi->parse_rules = 0;
     ri = rn = 0;
@@ -308,7 +318,6 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	mchar w_match_buf[MAX_RULE_SIZE];
 	mchar w_subst_buf[MAX_RULE_SIZE];
 	char* rbp;
-	char* rp;
 	int got_command;
 	int rc;
 	
@@ -327,8 +336,13 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	memset (&rmi->parse_rules[ri], 0, sizeof(Parse_Rule));
 
 	/* Get next line from file */
-	rp = fgets (rule_buf,2048,fp);
-	if (!rp) break;
+        if (!lines[line_number]) break;
+        if (strlen(lines[line_number]) >= sizeof(rule_buf)) {
+            valid = FALSE;
+            line_number++;
+            continue;
+        }
+        g_strlcpy(rule_buf, lines[line_number++], sizeof(rule_buf));
 
 	/* Skip leading whitespace */
 	rbp = rule_buf;
@@ -351,7 +365,8 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	    break;
 	default:
 	    got_command = 0;
-	    printf ("Warning: malformed command in rules file:\n%s\n",
+	    valid = FALSE;
+        sr_console_printf(stdout, "Warning: malformed command in rules file:\n%s\n",
 		    rule_buf);
 	    break;
 	}
@@ -359,7 +374,8 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 
 	/* Skip past fwd slash */
 	if (*rbp++ != '/') {
-	    printf ("Warning: malformed command in rules file:\n%s\n",
+	    valid = FALSE;
+        sr_console_printf(stdout, "Warning: malformed command in rules file:\n%s\n",
 		    rule_buf);
 	    continue;
 	}
@@ -368,7 +384,8 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	rbp = parse_escaped_string (match_buf, rbp);
 	debug_printf ("match_buf=%s\n", match_buf);
 	if (!rbp) {
-	    printf ("Warning: malformed command in rules file:\n%s\n",
+	    valid = FALSE;
+        sr_console_printf(stdout, "Warning: malformed command in rules file:\n%s\n",
 		    rule_buf);
 	    continue;
 	}
@@ -378,7 +395,8 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	    rbp = parse_escaped_string (subst_buf, rbp);
 	    debug_printf ("subst_buf=%s\n", subst_buf);
 	    if (!rbp) {
-		printf ("Warning: malformed command in rules file:\n%s\n",
+		valid = FALSE;
+        sr_console_printf(stdout, "Warning: malformed command in rules file:\n%s\n",
 			rule_buf);
 		continue;
 	    }
@@ -387,7 +405,8 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	/* Parse flags */
 	rc = parse_flags (&rmi->parse_rules[ri], rbp);
 	if (!rc) {
-	    printf ("Warning: malformed command in rules file:\n%s\n",
+	    valid = FALSE;
+        sr_console_printf(stdout, "Warning: malformed command in rules file:\n%s\n",
 		    rule_buf);
 	    continue;
 	}
@@ -397,7 +416,8 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	gstring_from_string (rmi, w_match_buf, MAX_RULE_SIZE, match_buf, 
 			     CODESET_UTF8);
 	if (!compile_rule(&rmi->parse_rules[ri], w_match_buf)) {
-	    printf ("Warning: malformed regular expression:\n%s\n", 
+	    valid = FALSE;
+        sr_console_printf(stdout, "Warning: malformed regular expression:\n%s\n",
 		    match_buf);
 	    continue;
 	}
@@ -419,7 +439,82 @@ init_metadata_parser (RIP_MANAGER_INFO* rmi, char* rules_file)
 	debug_printf ("End of loop\n");
 	ri++;
     }
-    fclose(fp);
+    g_strfreev(lines);
+    g_free(contents);
+    return valid || !strict;
+}
+
+static gint64 rules_modification_time(const char *path, const GStatBuf *info)
+{
+#ifdef WIN32
+    WIN32_FILE_ATTRIBUTE_DATA attributes;
+    gunichar2 *wide = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
+    BOOL found = wide && GetFileAttributesExW((LPCWSTR)wide, GetFileExInfoStandard, &attributes);
+    g_free(wide);
+    if (found)
+        return ((gint64)attributes.ftLastWriteTime.dwHighDateTime << 32) |
+               attributes.ftLastWriteTime.dwLowDateTime;
+#elif defined(__linux__)
+    (void)path;
+    return (gint64)info->st_mtim.tv_sec * 1000000000 + info->st_mtim.tv_nsec;
+#else
+    (void)path;
+#endif
+    return info->st_mtime;
+}
+
+static void remember_rules_stamp(RIP_MANAGER_INFO *rmi)
+{
+    GStatBuf info;
+    if (g_stat(rmi->prefs->rules_file, &info) == 0) {
+        rmi->rules_mtime = rules_modification_time(rmi->prefs->rules_file, &info);
+        rmi->rules_size = info.st_size;
+    } else {
+        rmi->rules_mtime = 0;
+        rmi->rules_size = -1;
+    }
+}
+
+BOOL init_metadata_parser(RIP_MANAGER_INFO *rmi, char *rules_file)
+{
+    BOOL strict = rmi->prefs && rmi->prefs->reload_rules;
+    BOOL result = load_metadata_rules(rmi, rules_file, strict);
+    if (strict) remember_rules_stamp(rmi);
+    rmi->rules_next_check = g_get_monotonic_time() + 5 * G_USEC_PER_SEC;
+    return result;
+}
+
+void parser_poll_rules(RIP_MANAGER_INFO *rmi)
+{
+    GStatBuf info;
+    RIP_MANAGER_INFO *candidate;
+    gint64 now = g_get_monotonic_time();
+    if (!rmi->prefs->reload_rules || now < rmi->rules_next_check) return;
+    rmi->rules_next_check = now + 5 * G_USEC_PER_SEC;
+    if (g_stat(rmi->prefs->rules_file, &info) != 0) {
+        if (rmi->rules_size != -1)
+            sr_console_printf(stderr, "\nMetadata rules unavailable; keeping previous rules.\n");
+        rmi->rules_size = -1;
+        return;
+    }
+    if (rmi->rules_mtime == rules_modification_time(rmi->prefs->rules_file, &info) &&
+        rmi->rules_size == info.st_size) return;
+    rmi->rules_mtime = rules_modification_time(rmi->prefs->rules_file, &info);
+    rmi->rules_size = info.st_size;
+    candidate = g_new0(RIP_MANAGER_INFO, 1);
+    candidate->prefs = rmi->prefs;
+    candidate->mchar_cs = rmi->mchar_cs;
+    if (load_metadata_rules(candidate, rmi->prefs->rules_file, TRUE)) {
+        Parse_Rule *old = rmi->parse_rules;
+        rmi->parse_rules = candidate->parse_rules;
+        candidate->parse_rules = old;
+        rmi->rules_reloaded = TRUE;
+        sr_console_printf(stderr, "\nMetadata rules reloaded.\n");
+    } else {
+        sr_console_printf(stderr, "\nInvalid metadata rules; keeping previous rules.\n");
+    }
+    parser_free(candidate);
+    g_free(candidate);
 }
 
 void
