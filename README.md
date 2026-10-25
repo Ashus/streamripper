@@ -2,14 +2,46 @@
 
 A fork of the original Streamripper with native HTTPS, IPv6 support, current 64-bit libraries, working ICY track names, and Unicode filenames.
 
-This independent fork is maintained at [Ashus/streamripper](https://github.com/Ashus/streamripper). It records MP3, AAC, and Ogg Vorbis streams; MP3 can optionally be decoded to WAV.
+This independent fork is maintained at [Ashus/streamripper](https://github.com/Ashus/streamripper). It records MP3, AAC, Ogg Vorbis, FLAC and supported HLS streams; MP3 can optionally be decoded to WAV.
 
-**[Download the portable 7z archive from Releases](https://github.com/Ashus/streamripper/releases).** Extract the whole archive: the executable requires its bundled DLLs. In a source checkout, building and packaging generates a local, ignored `dist` directory; binaries are not committed to Git.
+**[Download Windows portable archives and Linux amd64 DEB packages from Releases](https://github.com/Ashus/streamripper/releases).** On Windows, extract the whole 7z archive: the executable requires its bundled DLLs. Binaries and generated packages are not committed to Git.
 
-The portable release is for Windows. Linux users build from source using the
-complete [Linux build guide](BUILDING-LINUX.md); no `.deb` packages are produced.
+The portable release is for Windows. Linux amd64 users can install the `.deb`
+package on systems satisfying its Debian runtime dependencies; it is built and
+tested on Debian 13. Installation, optional source builds and DEB packaging are
+covered by the complete [Linux guide](BUILDING-LINUX.md).
 Windows toolchain setup, builds and releases have a separate
 [Windows build guide](BUILDING-WINDOWS.md).
+
+## Format support
+
+| Input | Saved format | Individual tracks | Silence-based splitting | WAV conversion | Relay |
+| --- | --- | --- | --- | --- | --- |
+| MP3 | `.mp3` | Yes, from ICY titles | Yes | Yes, 16-bit PCM | Yes |
+| ADTS AAC | `.aac` | Yes, from ICY titles | Yes, with FAAD2 | No | Yes |
+| Ogg Vorbis | `.ogg` | Native logical-stream boundaries and comments | No | No | Yes |
+| Native FLAC | `.flac` | No, whole stream | No | No | No |
+| Ogg FLAC | `.oga` | No, whole stream | No | No | No |
+| HLS with MPEG-TS segments | `.ts` | No, whole stream | No | No | No |
+| HLS with packed ADTS AAC | `.aac` | No, whole stream | No | No | No |
+
+MP3/AAC metadata rules can clean names and exclude individual tracks. They do
+not filter continuous recordings or relay audio. Native Ogg comments use a
+separate path and do not run through those rules. Ogg song boundaries depend
+on the broadcaster creating separate logical streams; the container cannot
+infer songs inside one uninterrupted logical stream.
+
+`--metadata-log` logs available ICY titles for MP3, AAC and FLAC. It does not
+extract native Ogg comments or HLS segment metadata. FLAC ICY titles update
+the display and log without splitting the recording.
+
+Compressed audio remains in its original codec; `--wav` decodes MP3 to PCM.
+HLS does not demux MPEG-TS into separate audio files. Ogg FLAC headers and
+timing are normalized without re-encoding. HLS/FLAC ignore `--relay` with a
+warning so shared command lines can still record them.
+Opus, DASH, fragmented MP4 HLS and AAC in LATM/LOAS are not supported.
+
+## Quick start
 
 After extracting the release archive:
 
@@ -54,6 +86,15 @@ The existing `[stream defaults]` and station sections are supported. For example
 codeset_metadata=AUTO
 output_dir=C:/Radio
 ```
+
+## Reconnection
+
+Automatic reconnect is enabled after the first successful connection. Temporary
+network/DNS failures, dropped connections, timeouts and HTTP 408/429/5xx responses
+retry after five seconds, or a longer `Retry-After` delay. Each attempt resolves
+DNS again. Invalid URLs, certificate/trust errors, authentication failures and
+file-output errors stop recording. `--no-reconnect` disables retries; the initial
+connection failure still exits. Retry waits can be interrupted normally.
 
 ## TLS options
 
@@ -181,47 +222,11 @@ that search and reports a bind error instead.
 - Use `--wav` to decode MP3 into 16-bit PCM WAV, for individual tracks or `-a` show files. Mono/stereo and the source sample rate are preserved. This does not improve MP3 quality; files are larger and classic WAV is limited to 4 GiB.
 - AAC and Ogg Vorbis are recorded in their native format; their conversion to WAV is outside this release.
 
-## Command-line aliases
+## Command-line options
 
-Every supported single-letter option has a descriptive alias. Short forms remain
-supported. Aliases with values accept both `--name VALUE` and `--name=VALUE`;
-flags without values reject an assigned value. Brackets below mark optional
-values: omitting one preserves the short option's default behavior.
-
-| Short            | Long alias                    |
-|------------------|-------------------------------|
-| `-h`             | `--help`                      |
-| `-v`             | `--version`                   |
-| `-c`             | `--no-reconnect`              |
-| `-4`             | `--ipv4`                      |
-| `-6`             | `--ipv6`                      |
-| `-m SECONDS`     | `--timeout SECONDS`           |
-| `-u AGENT`       | `--user-agent AGENT`          |
-| `-p URL`         | `--proxy URL`                 |
-| `-I IP`          | `--interface IP`              |
-| `-d DIR`         | `--output-directory DIR`      |
-| `-D PATTERN`     | `--output-pattern PATTERN`    |
-| `-s`             | `--no-stream-directory`       |
-| `-q [START]`     | `--sequence [START]`          |
-| `-a [FILE]`      | `--continuous-file [FILE]`    |
-| `-A`             | `--no-individual-tracks`      |
-| `-l SECONDS`     | `--record-duration SECONDS`   |
-| `-M MEGABYTES`   | `--max-megabytes MEGABYTES`   |
-| `-k COUNT`       | `--skip-initial-tracks COUNT` |
-| `-t`             | `--keep-incomplete`           |
-| `-o POLICY`      | `--overwrite POLICY`          |
-| `-T`             | `--truncate-duplicates`       |
-| `-w FILE`        | `--metadata-rules FILE`       |
-| `-E COMMAND`     | `--external-metadata COMMAND` |
-| `-i`             | `--no-id3`                    |
-| `-r [[IP:]PORT]` | `--relay [[IP:]PORT]`         |
-| `-R COUNT`       | `--max-relay-clients COUNT`   |
-| `-L FILE`        | `--relay-playlist FILE`       |
-| `-z`             | `--no-port-scan`              |
-
-`--interface` is a Unix-only network setting. `-?` also displays help. The obsolete
-`-f` and `-P` options remain unsupported. Long-only options retain the syntax
-shown in `streamripper.exe --help`, which groups all options by purpose.
+Short and descriptive long options are supported. Run `streamripper --help` for
+the complete option list, grouped by purpose. Options with values accept
+`--name VALUE` or `--name=VALUE`; existing short forms remain available.
 
 ## Metadata parsing
 
@@ -257,9 +262,12 @@ Unicode APIs, including directory enumeration for sequence numbering;
 `--codeset-filesys` does not change those operations.
 
 The default `--codeset-metadata=AUTO` checks each incoming metadata string for
-valid UTF-8. Valid UTF-8 is decoded directly; other bytes use the system's legacy
+valid UTF-8. Valid UTF-8 is decoded directly. For MP3/AAC streams identified by
+an Icecast server header, other bytes use ISO-8859-1, independent of the system
+locale. For other servers, legacy bytes use the system's legacy
 encoding (the Windows ANSI code page, such as CP1250). With a UTF-8 system locale,
-the legacy fallback is ISO-8859-1. Detection is repeated for every update, so a
+the legacy fallback is ISO-8859-1. This policy also applies to ICY station names.
+Detection is repeated for every update, so a
 station can switch between UTF-8 and legacy titles within one connection.
 
 This prevents UTF-8 names such as `Mötley Crüe` from becoming `MĂ¶tley CrĂĽe` in
@@ -290,6 +298,11 @@ back to received byte size, for example `75kB` or `14,81MB`. Units are decimal
 (1 kB = 1000 bytes, 1 MB = 1000000 bytes); smaller values use `B`.
 The counter resets when the displayed track changes; metadata timing and split
 padding can make it differ from the final file's duration.
+
+Interactive status lines adapt to the terminal's visible width, including after
+resizing. Titles use the remaining columns and old text is cleared when they
+shrink. Wide Unicode characters and combining marks are counted by display
+width. Redirected output retains a fixed 50-column title limit.
 
 To discard incomplete recordings shorter than ten minutes:
 
@@ -352,6 +365,18 @@ aligned to verified frame headers; a partial frame received when joining or
 stopping a stream is discarded. AAC stays in `.aac`, with no M4A muxer or FFmpeg
 dependency.
 
+MP3 and ADTS AAC individual recordings search decoded audio for a quiet split
+near each metadata change by default. AAC analysis uses FAAD2; recorded AAC
+frames are copied unchanged. `--xs-none` disables the search, while window,
+silence-length, offset and padding settings tune it. AAC uses the standard
+detector even with `--xs2` (the alternative detector is MP3-only). If AAC analysis
+fails or has insufficient data, recording retains the ADTS-aligned metadata
+boundary. This does not add AAC-to-WAV support.
+
+Ogg Vorbis recordings use logical-stream boundaries and their native metadata,
+without silence detection or trimming. A single uninterrupted logical stream
+does not itself identify individual songs.
+
 Individual MP3 recordings receive a fresh Xing/Info header with their own audio
 frame and byte counts when closed. Stale source Xing/Info/VBRI headers are removed.
 This supplies duration information for both CBR and VBR recordings; it does not
@@ -384,17 +409,74 @@ The relay responds with `ICY 200 OK`. The retained page-request helper uses
 HTTP/1.1, a Chrome/152 browser User-Agent, `Accept-Encoding: identity`, and
 `Connection: close`; it is not called by the current CLI recording path.
 
+## HLS and FLAC recording
+
+HLS URLs ending in `.m3u8` (including query strings), or responses with an HLS
+content type, are recorded as one continuous file. Master playlists select the
+highest bandwidth by default; `--hls-variant=worst` chooses the lowest and
+`--hls-variant=128000` chooses the closest advertised bandwidth in bits/s.
+Live playlists are refreshed and duplicate media sequence numbers are skipped.
+The recorder retries interrupted segment downloads using the normal reconnect
+policy, without writing partial segments. If the live window moves past a
+missing segment, recording stops with an error instead of silently losing it.
+
+MPEG-TS segments retain their container in `.ts`; packed ADTS AAC segments with
+`.aac` URLs are concatenated into `.aac`, preserving their ID3 timestamp tags.
+AES-128 CBC is supported with explicit or sequence-derived IVs. Keys, playlists
+and segments use the same verified HTTPS, proxy and timeout settings as other
+streams. Each response is bounded to 1 MiB for playlists, 16 bytes for keys and
+128 MiB for segments. There is no demuxing, transcoding, adaptive switching or
+FFmpeg dependency. Separate audio renditions, fMP4, byte ranges and DRM are
+rejected explicitly.
+
+Native FLAC (`audio/flac`, `audio/x-flac` or a `.flac` URL) and Ogg FLAC
+(`application/ogg`/`audio/ogg`) are preserved as `.flac` and `.oga`. ICY metadata
+is removed from the audio transport and can be saved with `--metadata-log`;
+it never splits a FLAC stream or adds MP3 ID3 tags.
+Ogg FLAC is finalized with relative page/sample/frame counters, a corrected
+STREAMINFO sample count and complete end-of-stream pages. This fixes duration
+and seeking when a live server supplies pages from a long-running encoder.
+Incomplete final pages/frames are discarded; compressed audio is not re-encoded.
+The source PCM MD5 is cleared because it does not describe the recorded subset.
+Source seek/cue offsets are replaced with padding; seeking uses the rebuilt Ogg
+granules and relative FLAC frame numbers.
+
+HLS and FLAC use the usual output directory, naming, locking, overwrite policy
+and allocation settings. They record whole streams, so metadata rules,
+external metadata commands, relay output and `--wav` are unavailable.
+If `--relay` is present, recording continues with a warning and no relay listener
+or relay playlist is created. Relay client/port settings have no effect for these
+formats; metadata rules and external metadata remain explicit errors.
+Track splitting, initial-track skipping and MP3 ID3 options do not apply. A finite
+FLAC response or HLS ENDLIST completes the file; interrupted/live captures stay
+in `incomplete`. HLS progress and incomplete cleanup use accumulated EXTINF
+durations. Ogg FLAC uses its actual recorded sample count, including for
+minimum-duration cleanup. Native FLAC duration is currently unknown while
+recording, so progress shows file size and cleanup preserves interrupted native FLAC files.
+Continuous `-a` output is also supported; it retains the same native container.
+The console reports `stream: Unknown station` when no station name is supplied. HLS/FLAC
+progress shows `-` until a track title is known, rather than repeating the
+station name. FLAC ICY titles update the display without renaming or splitting
+the recording; artist/title tags inside Ogg/FLAC and HLS segments are not used
+for the track display.
+Missing station names use `Unknown station` both in the console and in output
+paths. For MP3/AAC, an empty artist and title also display as `-`; filename
+patterns retain their literal separators.
+The startup summary reports the input format, including ADTS or Ogg framing
+and HLS transport where applicable. MPEG-TS HLS reports its container without
+guessing the codec carried inside it. With `--wav`, the input remains MP3.
+
 ## Limitations
 
-- HLS and DASH are not supported.
+- DASH, fragmented MP4 HLS, byte-range HLS and SAMPLE-AES/DRM are not supported.
 - Some legacy size limits remain, notably 254 bytes for paths and track metadata.
 
 ## Documentation
 
 - [Metadata rules, regex filtering, and track numbering](METADATA-RULES.md)
 - [Windows: building, testing, and preparing a portable release](BUILDING-WINDOWS.md)
-- [Linux: building from source, installation, and testing](BUILDING-LINUX.md)
-- [Changes and known limitations](CHANGELOG.md)
+- [Linux: DEB installation, source builds, packaging, and testing](BUILDING-LINUX.md)
+- [Release history](CHANGELOG.md)
 - [Fork provenance, issue review, and test scope](PORTING.md)
 - [Bundled libraries, licenses, and source packages](THIRD-PARTY.md)
 - [Original manual and other command-line options](README)

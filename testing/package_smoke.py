@@ -32,7 +32,7 @@ def package(dest):
     assert 'licenses/faad2/COPYING' in entries and 'licenses/faad2/NOTICE' in entries
     assert 'licenses/libvorbis/COPYING' in entries
     for name in ('METADATA-RULES.md', 'BUILDING-WINDOWS.md', 'BUILDING-LINUX.md',
-                 'parse_rules.txt', 'advert_rules.txt'):
+                 'parse_rules.txt'):
         assert name in entries
         assert (dest / name).read_bytes() == (repo / name).read_bytes()
     assert (dest / 'licenses/libvorbis/COPYING').read_bytes() == (repo / 'third_party/licenses/libvorbis/COPYING').read_bytes()

@@ -49,9 +49,11 @@ try:
     with tempfile.TemporaryDirectory(prefix='metadata-filter-', dir=repo / 'build' if os.name == 'nt' else None) as tmp:
         root = Path(tmp)
         rules = root / 'pravidla-žluťoučký.txt'
-        example = (repo / 'advert_rules.txt').read_text(encoding='utf-8')
-        rules.write_text('m/^Ignore/e\n' + example.replace(r'# m/^[\s-]*$/x',
-                                         r'm/^[\s-]*$/x'), encoding='utf-8')
+        example = (repo / 'parse_rules.txt').read_text(encoding='utf-8')
+        rules.write_text('m/^Ignore/e\n' + r'm/^[\s-]*$/x' + '\n'
+                         + example.replace(r'# m/\badvert\b/ix', r'm/\badvert\b/ix')
+                                  .replace(r'# s/\s*-?\s*mp3pro$//i',
+                                           r's/\s*-?\s*mp3pro$//i'), encoding='utf-8')
         for wav in (False, True):
             dest = root / 'žluťoučký' / ('wav' if wav else 'mp3')
             args = [str(exe),
@@ -67,6 +69,8 @@ try:
                 log_path.write_text('Previous session\n', encoding='utf-8')
             result = subprocess.run(args, capture_output=True, timeout=15)
             assert result.returncode == 0, result.stdout + result.stderr
+            if not wav:
+                assert b'format: MP3' in result.stdout, result.stdout
             extension = '.wav' if wav else '.mp3'
             files = sorted(dest.rglob('*' + extension))
             expected = [f'{n:04d}_Artist - {title}{extension}'

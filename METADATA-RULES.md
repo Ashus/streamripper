@@ -4,29 +4,30 @@
 metadata. Use it to discard individually recorded tracks, clean up titles, or
 extract artist, title, album, year, and track-number fields.
 
-The examples describe this Windows fork, version 1.68.1. See [README.md](README.md)
+The examples describe this independent Windows and Linux CLI fork. See [README.md](README.md)
 for installation and [the original manual](README) for other recording options.
 
-See [command-line aliases](README.md#command-line-aliases) for descriptive long
-forms of all supported single-letter options used below.
+Short and descriptive long options are supported. Run `streamripper --help`
+for their complete list; see [command-line options](README.md#command-line-options).
 
 ## Quick start
 
-Copy [advert_rules.txt](advert_rules.txt), customize it, then run:
+Copy [parse_rules.txt](parse_rules.txt), customize it, then run:
 
 ```bat
-streamripper.exe "https://example.com/radio" -w "C:\Radio\advert_rules.txt" -d C:\Radio -q
+streamripper.exe "https://example.com/radio" -w "C:\Radio\parse_rules.txt" -d C:\Radio -q
 ```
 
-The example excludes titles containing the standalone word `advert`, ignoring
-case, and retains ordinary `Artist - Title` parsing. It does not recognize
+The example enables only ordinary `Artist - Title` parsing. Uncomment its
+optional filter to exclude titles containing the standalone word `advert`,
+ignoring case, or its substitution to remove a trailing `mp3pro` suffix. It does not recognize
 advertisements by their audio content. Customize the expression for each station;
 a legitimate song title containing that word is also excluded.
 
 For a custom filename pattern with automatic numbering:
 
 ```bat
-streamripper.exe "https://example.com/radio" -w advert_rules.txt -D "C:/Radio/Station/%q - %A - %T"
+streamripper.exe "https://example.com/radio" -w parse_rules.txt -D "C:/Radio/Station/%q - %A - %T"
 ```
 
 In a Windows `.cmd` or `.bat` file, double the filename pattern's percent signs:
@@ -34,13 +35,41 @@ In a Windows `.cmd` or `.bat` file, double the filename pattern's percent signs:
 
 ## Input and scope
 
+### Reload rules while recording
+
+Use `--reload-rules` together with `--metadata-rules FILE` to check the file's
+modification time and size every five seconds. Unchanged files are not read or
+recompiled. For example:
+
+```bat
+streamripper.exe "https://example.com/radio" --metadata-rules rules.txt --reload-rules
+```
+
+The complete UTF-8 file is parsed and compiled before replacing the active
+rules. A malformed rule rejects the entire update; a missing/unreadable file
+keeps the previous rules. The initial file must be valid and readable. Messages
+report successful reloads and rejected updates. Prefer an editor that saves by
+atomic replacement, so partially written valid files are not mistaken for a
+finished edit.
+
+The latest ICY title is re-evaluated even if the station sends no new title.
+Changed names or save/exclude decisions create normal recording boundaries;
+already recorded audio is not retroactively removed. Unchanged decisions do not
+split the track. Reload alone does not duplicate `metadata.log` entries.
+Checks and application occur in the recording thread as audio is processed;
+an idle or stalled connection can delay application until processing resumes.
+This option applies to the ICY rules path, not external metadata or native Ogg
+comments. It cannot be combined with `--external-metadata`.
+HLS and FLAC record whole streams and reject `--metadata-rules` (and therefore
+`--reload-rules`); they do not create track boundaries from ICY titles.
+
 ### Log the titles used by rules
 
 Add `--metadata-log` to append timestamped ICY title changes to
 `incomplete/metadata.log` under the recording's output directory:
 
 ```bat
-streamripper.exe "https://example.com/radio" -w advert_rules.txt -d C:\Radio --metadata-log
+streamripper.exe "https://example.com/radio" -w parse_rules.txt -d C:\Radio --metadata-log
 ```
 
 The UTF-8 log records the decoded `StreamTitle` before substitutions, filtering,
@@ -60,7 +89,7 @@ each entry is closed after writing. Backslashes and control characters are escap
 as `\\`, `\t`, `\r`, `\n`, or `\xHH` to keep one update per line.
 
 Logging is disabled by default and the option is not saved in preferences.
-It applies to the MP3/AAC ICY path, including `--wav` and continuous recordings;
+It applies to the MP3/AAC and FLAC ICY paths, including `--wav` for MP3 and continuous recordings;
 native Ogg comments and external metadata (`-E`) bypass this path. The
 `incomplete` directory is created for logging even with `-A`. Write failures are
 reported on stderr without stopping audio recording. The log is not rotated.
@@ -71,13 +100,19 @@ For ICY streams, rules receive the decoded `StreamTitle` text, without the
 `StreamTitle='...';` wrapper. They do not receive the output path, filename
 sequence, or ID3 tags. Substitutions change the text seen by subsequent rules.
 
-The default metadata encoding is `AUTO`: valid UTF-8 takes priority, otherwise
-the system's legacy encoding is used (ISO-8859-1 when the locale is UTF-8).
+The default metadata encoding is `AUTO`: valid UTF-8 takes priority. Other bytes
+from MP3/AAC streams identified by an Icecast server header use ISO-8859-1.
+Other servers use the system's legacy encoding (ISO-8859-1 when the locale is UTF-8).
 Explicit `--codeset-metadata=NAME` and encoding settings loaded with `--config`
 override this heuristic. Use `--codeset-metadata=AUTO` to override a configured
 encoding. Implicit INI files are neither loaded nor saved; see
 [configuration](README.md#configuration).
 Rules receive the decoded UTF-8 text; the rule file itself remains UTF-8.
+The console decodes ICY station names using this same policy. Without a charset
+declaration, legacy encodings cannot always be distinguished: for example, byte
+`E1` means `á` in CP1250, CP1252 and ISO-8859-1. The Icecast version does not
+identify the encoding used by an individual station. Select an explicit encoding
+when the automatic fallback is unsuitable.
 See [metadata encoding](README.md#metadata-encoding) for limitations.
 
 ICY `StreamTitle` is one string, typically `Artist - Title`; the station does not
@@ -100,8 +135,7 @@ artist is empty. For example, a substitution may correctly clean metadata to
 `Artist - Song`, but without extraction that entire string remains in the title.
 Incomplete filenames composed as `Artist - Title` then become
 ` - Artist - Song.mp3`. Adding the extraction rule produces `Artist - Song.mp3`
-and separate artist/title fields for tags. See [parse_rules.txt](parse_rules.txt)
-for additional parsing variants, including metadata without spaces around `-`.
+and separate artist/title fields for tags. See the parsing variants below for other separators.
 
 Track exclusion applies to individual recordings in the MP3/AAC ICY recording
 path, including MP3 decoded with `--wav`. It does not remove audio from continuous
@@ -231,6 +265,37 @@ m/^([^|]+) \| ([^|]+) \| ([^|]+) \| ([0-9]{4}) \| ([0-9]+)$/A1C2T3Y4N5
 Captured fields can feed filenames and supported ID3 fields. The metadata track
 number (`N`) is distinct from the output filename sequence (`%q`).
 
+### Other separators and ignored updates
+
+For metadata without spaces around the separator, add this after the standard
+spaced-separator rule. It treats the first hyphen as the separator, so ambiguous
+artist names containing hyphens need a station-specific expression:
+
+```text
+m/^\s*([^-]*[^-\s])\s*-\s*(.*)\s*$/A1T2
+```
+
+For `Artist, Title`, use this extraction rule instead:
+
+```text
+m/^\s*([^,]*[^,\s])\s*,\s*(.*)\s*$/A1T2
+```
+
+To remove an unwanted leading hyphen before extraction:
+
+```text
+s/^\s*-\s*//
+```
+
+To ignore an announcement update entirely, before extraction:
+
+```text
+m/^A suivre:/e
+```
+
+An ignored update leaves the preceding track active. Use exclusion (`x`)
+instead when the audio belongs to a separate advertisement.
+
 ### Empty titles and hyphens
 
 Optional rule, before extraction:
@@ -240,8 +305,8 @@ m/^[\s-]*$/x
 ```
 
 It excludes explicit empty titles, whitespace-only titles, and titles made only
-of spaces and hyphens, including ` - `. The supplied example leaves it disabled
-because such metadata can also accompany music.
+of spaces and hyphens, including ` - `. Keep it disabled unless suitable for the station, because such metadata can
+also accompany music.
 
 A zero-length ICY metadata block means **no update**, rather than an empty title.
 The previous track and its save/exclude decision continue. An explicit empty
@@ -252,7 +317,7 @@ at all, the filter cannot identify advertisements or infer song boundaries.
 
 | Option                                              | Relationship to metadata rules                                                                                                                                                                                                                                                          |
 |-----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `-w FILE`                                           | Load this rules file at recording startup. Restart after editing it; there is no live reload. Quote paths containing spaces.                                                                                                                                                            |
+| `-w FILE`                                           | Load this rules file at recording startup. Add `--reload-rules` to apply edits while recording. Quote paths containing spaces.                                                                                                                                                            |
 | `-d DIR`                                            | Set the output directory; this path is not regex input.                                                                                                                                                                                                                                 |
 | `-D PATTERN`                                        | Set the output filename/directory pattern. `%A`, `%T`, and `%C` use parsed artist, title, and album. `%S` is the stream name.                                                                                                                                                           |
 | `-q [START]`                                        | Add numbering to the default filename pattern. Without `START`, detect the next number from existing files; `-q 1` starts at 1 for this run.                                                                                                                                            |
@@ -286,7 +351,7 @@ does not reserve numbers against unrelated applications or older Streamripper bu
 ## Boundaries and audio timing
 
 Filtering follows metadata boundaries. Late or inaccurate station metadata can
-leave part of an advertisement in an accepted recording. MP3 split options tune
+leave part of an advertisement in an accepted recording. MP3/AAC split options tune
 the relationship between metadata and the audio split:
 
 | Option                            | Meaning                                                                                                       |
@@ -300,10 +365,23 @@ the relationship between metadata and the audio split:
 
 These options adjust split timing; they do not recognize advertisements.
 
+MP3 and ADTS AAC silence searching is enabled by default: the search window is
+6000 ms before and after the estimated metadata boundary, with 1000 ms of
+silence. AAC is decoded by FAAD2 only for analysis; saved ADTS frames are not
+re-encoded. AAC uses the standard detector even when `--xs2` is selected.
+Decode errors or insufficient analysis data retain the frame-aligned metadata
+boundary. `--xs-none` bypasses AAC decoding for split analysis.
+Continuous recordings and relay audio are not trimmed by this search.
+Ogg Vorbis uses native logical-stream boundaries and comments instead; it does
+not search for silence or trim quiet edges. A continuous logical stream may
+contain several songs without exposing their boundaries.
+
 ## Troubleshooting and limitations
 
 - A missing or unreadable `-w` file silently falls back to the built-in rules.
   Check the actual path and permissions before relying on exclusion.
+  With `--reload-rules`, the initial file must instead load successfully;
+  unavailable later updates retain the previous valid rules.
 - Malformed rules print warnings and are skipped. An empty or comment-only file
   supplies no custom actions: the whole title is kept as the title field.
 - Check the console for malformed-command/regex warnings at startup. Use a short

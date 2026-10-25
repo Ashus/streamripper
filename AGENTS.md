@@ -25,6 +25,9 @@
   hardcoding a particular release in tag or archive commands.
 - Distribute the contents of `dist` as a portable `.7z` archive with a SHA-256
   checksum. Keep the complete required runtime DLLs and license notices.
+- Also produce a native Linux amd64 `.deb` with `package-linux.py`. Keep runtime
+  libraries as generated Debian dependencies. Both packaging workflows write
+  artifacts and SHA-256 files to `build/release` for manual release uploads.
 - Do not commit binaries, `dist`, toolchains, or release archives; do not use Git
   LFS for them. Do not push, publish, or create release tags without a request.
 
@@ -70,14 +73,18 @@
   scripts from `__file__`; explicit relative arguments refer to the caller's CWD.
 - Use `build-windows.cmd` to build and `package-windows.cmd` to regenerate `dist`
   and the `.7z` archive. Do not edit generated packaged files directly.
+- Use `package-linux.py` on Debian amd64/WSL to build and package Linux. Test DEBs
+  with `testing/debian_package.py`; keep its dpkg installation tests isolated
+  from the host system.
 - Keep temporary helper scripts and audit downloads under ignored `build`, remove
   them when finished, and do not commit them. Do not delete `build` wholesale:
   it contains the local toolchain, test fixtures, and release artifacts.
 - Recording must not create unsolicited debug files such as `dump.mp3` or
   `gcs1.txt`, nor overwrite existing user files with those names.
-- Under WSL, an existing Windows checkout may be shared, for example at
-  `/mnt/projekty/Streamripper`. Keep the Linux build directory separate from the
-  Windows `build` directory. Do not reuse a CMake cache between operating systems.
+- Under WSL (`ssh -o BatchMode=yes wsl-ai-sandbox`), an existing Windows checkout may 
+  be shared, for example at `/mnt/projekty/Streamripper`. Keep the Linux build directory
+  separate from the Windows `build` directory. Do not reuse a CMake cache between
+  operating systems.
 
 ## Validation and transport behavior
 

@@ -41,6 +41,58 @@ Commit messages identify original authors and source revisions where changes wer
 New HTTP chunk decoding, Windows thread/handle lifetime fixes, and regression tests
 were implemented locally; they are not a wholesale import of either fork.
 
+## HLS and FLAC
+
+The whole-stream recording scope was reviewed against **Jakub Kaprzyk**'s
+[jaakristioja/streamripper](https://github.com/jaakristioja/streamripper/tree/71f683145246b2bd8c1bcf3e55cc2d9d3c4878c7),
+revision `71f683145246b2bd8c1bcf3e55cc2d9d3c4878c7` (`3.7.1-qbus`).
+The implementation in `lib/stream_capture.c` was written independently around
+this fork's verified HTTP/TLS/proxy transport and cross-platform file writers;
+it is not an import of the other fork's separate HLS networking/output code.
+
+HLS records complete MPEG-TS or packed ADTS AAC segments without demuxing or
+transcoding. It supports master variants, live sequence tracking, ENDLIST and
+AES-128 CBC with sequence-derived or explicit IVs. Failed transfers do not
+advance the sequence or append partial bytes. Unsupported containers, encryption,
+byte ranges and skipped live windows fail explicitly. Separate audio renditions
+are currently rejected rather than silently recording a video-only variant.
+Native FLAC retains its original bytes. Ogg FLAC is repaged with relative granules
+and frame/sample numbers, corrected checksums, sample counts and EOS, preserving
+compressed audio without re-encoding. These normalization/finalization changes
+were implemented locally in `lib/ogg_flac_output.c`; they are not imported from
+the reviewed fork. Neither FLAC path is split by ICY titles.
+There is no FFmpeg or libFLAC runtime dependency.
+
+`testing/stream_capture.py` uses local HTTP/HTTPS servers, generated transport
+packets, AES fixtures and generated valid constant-sample FLAC/Ogg FLAC.
+It checks variant selection, relative redirects, live overlap, AES IVs,
+partial-segment retry, chunked bodies, Unicode paths, ICY stripping and lock
+removal. Ogg tests include absolute live counters, frames spanning pages,
+interruption inside pages/packets, continuous output, console/signal shutdown,
+sample-based retention and header finalization. Optional `--flac flac` validates
+both FLAC containers and checks seeked PCM against the expected samples.
+Transport-packet and ADTS fixtures test byte preservation/framing;
+they do not claim decoded MPEG-TS/AAC playback validation.
+
+## AAC silence detection
+
+The FAAD2 analysis path is adapted from **Jakub Kaprzyk**'s
+[AAC silence detection change](https://github.com/jaakristioja/streamripper/commit/7bbfb7d6a01095c64e304cdd7c3eb3f5efa2482a).
+It keeps this fork's libmad MP3 path and native ADTS finalization. Complete AAC
+frames are decoded only to locate a quiet split; recorded packets are unchanged.
+This adaptation validates frame extents, handles decode failures by retaining the
+metadata boundary, uses the decoded HE-AAC/SBR sample rate, combines all channel
+energies without phase cancellation, and returns exclusive frame-aligned cuts.
+Like the reviewed port, AAC uses the standard detector with `--xs2`.
+
+`testing/aac_silence.py` generates real AAC-LC fixtures using a test-only FAAC
+encoder: mono 44.1 kHz, stereo 48 kHz and opposite-phase stereo. It verifies
+decoded quiet intervals, padding, truncated input, malformed-input fallback,
+local ICY splitting, disabled detection and unchanged compressed frame payloads.
+These fixtures do not establish HE-AAC/SBR coverage.
+Ogg Vorbis continues to split at native logical-stream boundaries and metadata;
+silence trimming is deliberately not applied.
+
 ## Deliberately not imported
 
 - Neither fork's TLS defaults: this release verifies certificate chains and hostnames
@@ -49,7 +101,7 @@ were implemented locally; they are not a wholesale import of either fork.
   The latter changes PATH lookup and does not by itself prevent command injection.
 - Autotools-generated artifacts, bundled test frameworks, cross-build containers,
   and changes that only support removed Winamp/Windows targets in another fork.
-- HLS, FLAC, minimp3, AAC silence detection, AAC/Ogg-to-WAV,
+- minimp3, AAC/Ogg-to-WAV,
   flexible duration syntax, and broader numeric-option validation. These remain
   candidates for a subsequent Windows release and require separate porting/tests.
 - No claim is made that this review found every inherited defect.
@@ -75,8 +127,9 @@ open items. The first-track skipping status now retains the displayed track's
 decision before the writer count is incremented, matching the zero-based writer
 index used for dropping.
 The old libmad Valgrind warning has not been reproduced or ruled out with a
-memory-access checker on the current library. AAC/Ogg-specific integration coverage
-also remains incomplete; the current audio regression fixtures exercise MP3.
+memory-access checker on the current library. Current tests exercise MP3, WAV,
+generated Ogg Vorbis, native FLAC preservation, normalized/seekable Ogg FLAC and synthetic ADTS framing.
+Synthetic ADTS and HLS transport fixtures do not validate decoded AAC playback.
 Windows 98, Winamp, CVS, old SDK build instructions, and sample server headers in
 that file are historical and are not supported build instructions for this fork.
 

@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.68.2
+
+### Features
+
+- Record HLS master/live playlists with variant selection, AES-128 decryption
+  and verified HTTPS, preserving MPEG-TS or packed ADTS AAC.
+- Record native and Ogg FLAC streams without transcoding, with ICY metadata
+  stripping and optional title logging.
+- Provide Linux amd64 DEB packages with automatic runtime dependencies, guides
+  and SHA-256 checksums alongside the Windows portable release.
+- Find quiet ADTS AAC track boundaries with FAAD2, honoring silence windows,
+  offsets, padding and `--xs-none` while preserving compressed audio unchanged.
+- Add opt-in `--reload-rules` to apply validated metadata-rule changes every five
+  seconds without reconnecting. Re-evaluate the current title and retain the
+  previous rules if an update is invalid or unavailable.
+- Expand recording status to the terminal width, handle resizing and preserve
+  Unicode characters. Show the input format and container in the startup summary.
+- Include the version, build timestamp and project URL in help and version output.
+
+### Fixes
+
+- Recover from temporary network and DNS failures after a successful connection,
+  with interruptible five-second retries and support for longer HTTP
+  `Retry-After` delays. Permanent configuration, authentication, certificate
+  and output errors still stop recording.
+- Fix Ogg FLAC duration and seeking for live encoders with absolute counters.
+  Finalize sample counts and EOS pages, discard partial final frames/pages, and
+  use recorded sample counts for progress and incomplete-file retention.
+- Retry complete HLS segments without appending partial transfers or silently
+  skipping unavailable audio. Continue HLS/FLAC recording when shared command
+  lines include `--relay`, warning once and reporting no active relay.
+- Decode ICY station names consistently in console output and paths. In AUTO
+  mode, use Latin-1 for non-UTF-8 Icecast MP3/AAC metadata while preserving valid
+  UTF-8 and explicit encoding overrides.
+- Use `Unknown station` consistently for missing station names and `-` for
+  missing track titles; show available FLAC ICY titles separately.
+
+### Documentation
+
+- Add a format capability table and consolidate metadata-rule guidance in
+  METADATA-RULES.md with one concise parse_rules.txt example.
+
 ## 1.68.1
 
 ### Breaking changes
@@ -105,14 +147,3 @@ First public release of this independent Windows CLI fork, based on upstream
 - Winamp plugin/GUI and preferences, bundled obsolete Windows SDKs/DLLs/projects,
   unused Cbuf2/curses code, ad-hoc test programs, and obsolete distribution scripts.
 - License notices for unrelated build tools from the portable runtime package.
-
-### Known limitations
-
-- `--wav` accepts MP3 input only. It is not support for recording arbitrary WAV
-  source streams, does not recover quality lost during MP3 encoding, and stops at
-  the classic RIFF 4 GiB limit or a sample-rate/channel change.
-- HTTPS through HTTP proxy `-p` needs CONNECT and is not implemented.
-- IPv4 transport; HLS/DASH and FLAC are not supported by this release.
-- Inherited path/track limits remain, notably 254 bytes; Unicode may reach them sooner.
-- See [PORTING.md](PORTING.md) for fork provenance, issue review, test scope, and
-  functions intentionally left for a later release.

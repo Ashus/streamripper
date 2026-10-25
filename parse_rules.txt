@@ -1,85 +1,11 @@
-##--------------------------------------------------------------------------!
-#  This is an example of a file that can be customized for parsing metadata
-#
-#   USAGE:    streamripper URL -w parse_rules.txt
-#   FULL GUIDE: METADATA-RULES.md; advertisement example: advert_rules.txt
-##--------------------------------------------------------------------------!
+# See METADATA-RULES.md for syntax, ordering, examples, and limitations.
+# Usage: streamripper URL --metadata-rules parse_rules.txt [--reload-rules]
 
-# Lines that start with '#' are comments, and blank lines are ignored.
+# Optional: exclude titles containing the standalone word "advert", ignoring case.
+# m/\badvert\b/ix
 
-#####  CAUTION: Do not place your USER ADDED RULES at the end of the default
-#  parse_rules.txt file, because there is a [M]atch rule already there,
-#  (Artist - Title), that will prevent Streamripper from processing them.
+# Optional: remove a trailing "mp3pro" suffix, ignoring case.
+# s/\s*-?\s*mp3pro$//i
 
-#####  PUT YOUR USER ADDED RULES HERE:
-
-
-#####  LEADING LETTERS:
-# Rules can start with 'm' for match or 's' for substitute.
-# m - [M]atch
-# s - [S]ubstitute
-
-#####  TRAILING LETTERS:
-# They can have the flags:
-#  e    -- drop metadata
-#  g    -- accepted, but global substitution is not implemented
-#  i    -- ignore case
-#  s    -- save track
-#  x    -- exclude track
-#  A{n} -- match group N is the artist
-#  C{n} -- match group N is the album
-#  N{n} -- match group N is the track number
-#  T{n} -- match group N is the track title
-#  Y{n} -- match group N is the year
-
-####  EXAMPLES AND DEFAULT RULES:
-# Ignore metadata that begins with "A suivre"
-# The leading "m" says this is a match rule
-# The trailing "e" means drop the metadata
-m/^A suivre:/e
-
-# Exclude tracks that contain the given expression
-# The leading "m" says this is a match rule
-# The trailing "x" means that the track should not be saved (excluded)
-## m/advertisement/x
-
-# Save tracks that contain the given expression
-# The leading "m" says this is a match rule
-# The trailing "s" means that the track should be saved
-## m/[Ff]unk/s
-
-# The first m//e, m//s or m//x rule that matches determines the 
-# action that is performed.  If none match, then by default the file 
-# will be saved.  If you prefer having the default being that the 
-# files aren't saved, include the following rule after all your 
-# other m//e, m//s or m//x rules.
-## m//x
-
-# Strip off anything like "- Mp3Pro" from the end of the string
-# The leading "s" says this is a substitution rule
-# The trailing "i" means case insensitive matching
-s/\s*-?\s*mp3pro$//i
-
-# Strip off something like "- " from the beginning of the string
-s/^\s*-\s*//
-
-# The strip rules don't have to be after the m//e, m//s and m//x 
-# rules.  You can interleave them.  Rules are always processed
-# in order.
-# Substitutions replace the first occurrence with literal text; replacement
-# backreferences are not expanded. Use capture flags for artist/title fields.
-
-# This is the normal parsing rule: "Artist - Title"
-# The trailing "A1" means that the artist (A) matches subpattern 1
-# The trailing "T2" means that the title (T) matches subpattern 2
+# Extract artist (group 1) and title (group 2) from "Artist - Title"; keep this last.
 m/^\s*(.*?[^-\s])\s+-\s+(.*)\s*$/A1T2
-m/^\s*([^-]*[^-\s])\s*-\s*(.*)\s*$/A1T2
-
-# This is slightly different parsing rule: "Artist, Title"
-## m/^\s*([^,]*[^,\s])\s*,\s*(.*)\s*$/A1T2
-
-# After the first match with an m//A or m//T rule, no more rules 
-# will be checked.
-
-# If the metadata doesn't match any of the "m" rules, then the remaining 
-# metadata string (with substitutions) is entered into the "Title" field.

@@ -9,6 +9,7 @@ The binaries in `dist` use official MSYS2 mingw64 packages. The table records th
 | libiconv | 1.19-1 | spdx:LGPL-2.1-or-later, documentation:spdx:GPL-3.0-or-later | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-libiconv-1.19-1.src.tar.zst) |
 | gettext-runtime | 1.0-1 | spdx:GPL-3.0-or-later AND LGPL-2.1-or-later | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-gettext-1.0-1.src.tar.zst) |
 | libmad | 0.15.1b-5 | GPL | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-libmad-0.15.1b-5.src.tar.zst) |
+| faad2 | 2.11.3-1 | GPL-2.0-or-later | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-faad2-2.11.3-1.src.tar.zst) |
 | libogg | 1.3.6-1 | spdx:BSD-3-Clause | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-libogg-1.3.6-1.src.tar.zst) |
 | libvorbis | 1.3.7-3 | BSD-3-Clause | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-libvorbis-1.3.7-3.src.tar.zst) |
 | pcre2 | 10.49-1 | spdx:BSD-3-Clause | [Source package, including MSYS2 patches](https://mirror.msys2.org/mingw/sources/mingw-w64-pcre2-10.49-1.src.tar.zst) |
@@ -16,6 +17,11 @@ The binaries in `dist` use official MSYS2 mingw64 packages. The table records th
 Packaging recursively copies only DLLs imported by the executable and its dependencies. Windows system DLLs are not redistributed. License notices cover the shipped libraries and linked compiler/Windows runtime components; unrelated build tools are excluded. Versions reported by pkg-config are also recorded in `dist/build-info.json`. LAME is optional for tests only and is not packaged.
 
 Update this table against the actual packages used for each new release, especially after changing toolchains.
+
+FAAD2 decodes AAC only for silence analysis; it does not add AAC-to-WAV output.
+Code from FAAD2 is copyright (c) Nero AG, www.nero.com.
+The original FAAD2 2.11.3 `COPYING` and copyright notice are bundled under
+`licenses/faad2`. FAAC is an optional test encoder and is not redistributed.
 
 The source-controlled `third_party/licenses/libvorbis/COPYING` is the original
 license notice from [libvorbis 1.3.7](https://github.com/xiph/vorbis/blob/v1.3.7/COPYING).

@@ -51,10 +51,12 @@ Install dependencies in that MSYS2 **MINGW64** terminal:
 
 ```sh
 pacman -Syu
-pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-pkgconf mingw-w64-x86_64-glib2 mingw-w64-x86_64-libmad mingw-w64-x86_64-libogg mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libiconv mingw-w64-x86_64-openssl
+pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-pkgconf mingw-w64-x86_64-glib2 mingw-w64-x86_64-libmad mingw-w64-x86_64-faad2 mingw-w64-x86_64-libogg mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libiconv mingw-w64-x86_64-openssl
 ```
 
-For the optional WAV fixture tests, also install `mingw-w64-x86_64-lame`.
+For the optional WAV/AAC fixture tests, also install
+`mingw-w64-x86_64-lame` and `mingw-w64-x86_64-faac`.
+FAAC only generates test audio; its encoder DLL is not packaged.
 If an update asks you to close MSYS2, reopen it and finish `pacman -Syu`.
 See the official [package management guide](https://www.msys2.org/docs/package-management/).
 
@@ -123,6 +125,8 @@ Tests then run locally without accessing the internet. Build and package first.
 `audio_headers.py` checks ADTS framing, per-file MP3 Xing/Info counts, ID3v2/TLEN,
 and writer allocation lifecycles without FFmpeg. AAC fixtures are synthetic
 framing tests; actual MP3 output is also decoded with libmad.
+`aac_silence.py` separately generates real AAC-LC tone/silence fixtures using
+FAAC and checks FAAD2 analysis and lossless ICY splits.
 For individual checks, set the toolchain's `bin` on PATH and run:
 
 ```bat
@@ -132,10 +136,13 @@ python testing\package_smoke.py
 python testing\sequence_number.py
 python testing\recording_lock.py
 python testing\metadata_filter.py
+python testing\live_updates.py dist\streamripper.exe
+python testing\stream_capture.py dist\streamripper.exe build\toolchain\mingw64\bin\openssl.exe
 python testing\metadata_encoding.py
 python testing\console_output.py
 python testing\console_close.py
 python testing\audio_headers.py
+python testing\aac_silence.py dist\streamripper.exe build\aac_silence_regression.exe --faac build\toolchain\mingw64\bin\faac.exe
 python testing\incomplete_duration.py
 python testing\silence_output.py build\core_regression.exe build\sample-5s.mp3 build\toolchain\mingw64\bin
 python testing\https_smoke.py dist\streamripper.exe build\sample-5s.mp3 build\toolchain\mingw64\bin\openssl.exe
@@ -149,6 +156,16 @@ python testing\wav_smoke.py dist\streamripper.exe build\core_regression.exe buil
 
 Coverage:
 
+- Five-second rule reloads, atomic replacement, invalid/missing-file retention,
+  current-title reparsing, filter changes and metadata-log deduplication.
+- DNS/network and HTTP 503/429 recovery, Retry-After, fatal/initial failures,
+  disabled reconnects and cancellation during retry waits.
+- Console width changes, long Unicode titles and clearing stale row contents.
+- HLS variants/live playlists, AES-128, relative redirects, partial-segment
+  retries and rejected unsupported formats; native/ICY FLAC byte preservation,
+  normalized Ogg FLAC timestamps, frame numbers, complete pages and sample counts,
+  continuous output and interrupted-recording cleanup. See PORTING.md for the
+  fixture and decoder coverage limits.
 - Windows relay port ownership, automatic port scanning, explicit bind summaries,
   and independent IPv4/IPv6 routing between concurrent stations.
 - Recording-directory locks: PID diagnostics, simultaneous starts, reconnects,
@@ -224,6 +241,12 @@ Attach `build\release\streamripper-<version>-win64.7z` to the matching GitHub re
 using the version from `VERSION`.
 Also attach its `.7z.sha256` checksum file. The 7z archive contains the contents of `dist`
 directly, so extracting it provides the executable and DLLs in one directory.
+
+For the Linux release asset, run `package-linux.py` on Debian amd64/WSL using
+the [Linux packaging guide](BUILDING-LINUX.md#build-the-amd64-deb). It writes
+`streamripper_<version>-1_amd64.deb` and its `.deb.sha256` into the same
+`build/release` directory. Attach both files manually to the same release;
+the Windows packaging command preserves those Linux artifacts.
 
 Verify the finished archive, every packaged file, and the extracted executable:
 
