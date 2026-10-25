@@ -40,7 +40,7 @@
 ### Documentation
 
 - Add a format capability table and consolidate metadata-rule guidance in
-  METADATA-RULES.md with one concise parse_rules.txt example.
+  METADATA-RULES.md with one concise rules-examples.txt example.
 
 ## 1.68.1
 

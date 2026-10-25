@@ -19,7 +19,7 @@ endif()
 install(FILES README README.md METADATA-RULES.md BUILDING.md BUILDING-LINUX.md
   BUILDING-WINDOWS.md CHANGELOG.md PORTING.md THIRD-PARTY.md VERSION COPYING
   DESTINATION share/doc/streamripper COMPONENT Runtime)
-install(FILES parse_rules.txt
+install(FILES rules-examples.txt
   DESTINATION share/doc/streamripper/examples COMPONENT Runtime)
 install(FILES packaging/debian/copyright
   DESTINATION share/doc/streamripper COMPONENT Runtime)

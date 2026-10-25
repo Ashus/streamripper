@@ -18,6 +18,16 @@ Packaging recursively copies only DLLs imported by the executable and its depend
 
 Update this table against the actual packages used for each new release, especially after changing toolchains.
 
+The Windows package selects complete runtime notices rather than copying whole
+toolchain license directories. It retains the GCC GPL text and Runtime Library
+Exception, and the complete MinGW-w64 runtime notice (including its third-party
+notices). The duplicate headers notices, DDK readme, toolchain-only MinGW notice,
+PCRE2 license pointer, and licenses for unbundled gettext/libiconv command-line
+tools and libasprintf are omitted. The shipped libintl and libiconv libraries
+remain covered by their complete LGPL texts; libcharset uses the same LGPL text.
+Review this selection whenever dependencies change. Debian packages use system
+libraries whose notices are supplied by their respective Debian packages.
+
 FAAD2 decodes AAC only for silence analysis; it does not add AAC-to-WAV output.
 Code from FAAD2 is copyright (c) Nero AG, www.nero.com.
 The original FAAD2 2.11.3 `COPYING` and copyright notice are bundled under

@@ -62,7 +62,7 @@ def main():
         assert 'usr/bin/streamripper' in files
         for filename in expected_docs:
             assert 'usr/share/doc/streamripper/' + filename in files
-        assert 'usr/share/doc/streamripper/examples/parse_rules.txt' in files
+        assert 'usr/share/doc/streamripper/examples/rules-examples.txt' in files
         for name in files:
             assert not name.endswith(('.a', '.so', '.h', '.dll', '.exe')), name
     print('PASS: DEB metadata, dynamic runtime dependencies, payload, ownership and checksum')
@@ -91,7 +91,7 @@ def main():
         for filename in expected_docs:
             if filename != 'copyright':
                 assert (root / 'usr/share/doc/streamripper' / filename).read_bytes() == (repo / filename).read_bytes()
-        assert (root / 'usr/share/doc/streamripper/examples/parse_rules.txt').read_bytes() == (repo / 'parse_rules.txt').read_bytes()
+        assert (root / 'usr/share/doc/streamripper/examples/rules-examples.txt').read_bytes() == (repo / 'rules-examples.txt').read_bytes()
         run(*options, '--remove', 'streamripper')
         assert not binary.exists()
         assert not (root / 'usr/share/doc/streamripper').exists()

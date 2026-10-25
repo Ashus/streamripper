@@ -50,18 +50,24 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=release) as temporary:
             path = prefix / 'bin' / dll
             if path.is_file():
                 queue.append(path)
-    for name in modules.keys() | {'libgcc', 'crt', 'headers'}:
-        source = prefix / 'share' / 'licenses' / name
-        if source.is_dir():
-            shutil.copytree(source, stage / 'licenses' / name)
-        elif name not in ('libmad', 'libvorbis', 'faad2'):
-            raise FileNotFoundError(f'Missing license directory: {source}')
+    # Keep complete notices for distributed libraries and linked runtime code.
+    # Toolchain directories also contain notices for tools we do not distribute.
+    runtime_notices = (
+        'glib2/COPYING', 'openssl/LICENSE', 'libogg/COPYING',
+        'libiconv/COPYING.LIB', 'gettext-runtime/intl/COPYING.LIB',
+        'pcre2/LICENCE.md', 'libgcc/COPYING3', 'libgcc/COPYING.RUNTIME',
+        'crt/COPYING.MinGW-w64-runtime.txt',
+    )
+    for relative in runtime_notices:
+        target = stage / 'licenses' / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(prefix / 'share' / 'licenses' / relative, target)
     shutil.copytree(repo / 'third_party' / 'licenses', stage / 'licenses', dirs_exist_ok=True)
     (stage / 'licenses' / 'libmad').mkdir(exist_ok=True)
     shutil.copy2(repo / 'COPYING', stage / 'licenses' / 'libmad' / 'COPYING')
     for name in ('COPYING', 'README', 'README.md', 'BUILDING.md', 'BUILDING-WINDOWS.md', 'BUILDING-LINUX.md', 'CHANGELOG.md',
                  'PORTING.md', 'VERSION', 'THIRD-PARTY.md', 'METADATA-RULES.md',
-                 'parse_rules.txt'):
+                 'rules-examples.txt'):
         shutil.copy2(repo / name, stage / name)
     versions = {}
     for name, module in modules.items():

@@ -1,5 +1,5 @@
 # See METADATA-RULES.md for syntax, ordering, examples, and limitations.
-# Usage: streamripper URL --metadata-rules parse_rules.txt [--reload-rules]
+# Usage: streamripper URL --metadata-rules rules-examples.txt [--reload-rules]
 
 # Optional: exclude titles containing the standalone word "advert", ignoring case.
 # m/\badvert\b/ix

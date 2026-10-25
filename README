@@ -247,7 +247,7 @@ OPTIONS
        artist, album and track from the metadata string using regular
        expressions.
 
-       See the file parse_rules.txt, which is included in your distribution,
+       See the file rules-examples.txt, which is included in your distribution,
        for examples of the parse rules.
 
        -E external_command

@@ -49,7 +49,7 @@ try:
     with tempfile.TemporaryDirectory(prefix='metadata-filter-', dir=repo / 'build' if os.name == 'nt' else None) as tmp:
         root = Path(tmp)
         rules = root / 'pravidla-žluťoučký.txt'
-        example = (repo / 'parse_rules.txt').read_text(encoding='utf-8')
+        example = (repo / 'rules-examples.txt').read_text(encoding='utf-8')
         rules.write_text('m/^Ignore/e\n' + r'm/^[\s-]*$/x' + '\n'
                          + example.replace(r'# m/\badvert\b/ix', r'm/\badvert\b/ix')
                                   .replace(r'# s/\s*-?\s*mp3pro$//i',

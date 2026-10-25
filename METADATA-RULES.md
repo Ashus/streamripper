@@ -12,10 +12,10 @@ for their complete list; see [command-line options](README.md#command-line-optio
 
 ## Quick start
 
-Copy [parse_rules.txt](parse_rules.txt), customize it, then run:
+Copy [rules-examples.txt](rules-examples.txt), customize it, then run:
 
 ```bat
-streamripper.exe "https://example.com/radio" -w "C:\Radio\parse_rules.txt" -d C:\Radio -q
+streamripper.exe "https://example.com/radio" -w "C:\Radio\rules-examples.txt" -d C:\Radio -q
 ```
 
 The example enables only ordinary `Artist - Title` parsing. Uncomment its
@@ -27,7 +27,7 @@ a legitimate song title containing that word is also excluded.
 For a custom filename pattern with automatic numbering:
 
 ```bat
-streamripper.exe "https://example.com/radio" -w parse_rules.txt -D "C:/Radio/Station/%q - %A - %T"
+streamripper.exe "https://example.com/radio" -w rules-examples.txt -D "C:/Radio/Station/%q - %A - %T"
 ```
 
 In a Windows `.cmd` or `.bat` file, double the filename pattern's percent signs:
@@ -69,7 +69,7 @@ Add `--metadata-log` to append timestamped ICY title changes to
 `incomplete/metadata.log` under the recording's output directory:
 
 ```bat
-streamripper.exe "https://example.com/radio" -w parse_rules.txt -d C:\Radio --metadata-log
+streamripper.exe "https://example.com/radio" -w rules-examples.txt -d C:\Radio --metadata-log
 ```
 
 The UTF-8 log records the decoded `StreamTitle` before substitutions, filtering,
