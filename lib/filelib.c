@@ -207,6 +207,12 @@ filelib_init (RIP_MANAGER_INFO* rmi,
     case CONTENT_TYPE_AAC:
 	fli->m_extension = m_(".aac");
 	break;
+    case CONTENT_TYPE_FLAC:
+        fli->m_extension = rmi->flac_in_ogg ? m_(".oga") : m_(".flac");
+        break;
+    case CONTENT_TYPE_HLS:
+        fli->m_extension = m_(".ts");
+        break;
     default:
 	sr_console_printf(stderr, "Error (wrong suggested content type: %d)\n",
 		 content_type);
@@ -1502,7 +1508,7 @@ filelib_open_showfiles (RIP_MANAGER_INFO* rmi)
     g_free (new_fnbase);
 
     /* Open cue file, write header */
-    if (rmi->http_info.content_type != CONTENT_TYPE_OGG) {
+    if (rmi->http_info.content_type != CONTENT_TYPE_OGG && !rmi->capture) {
 	rc = filelib_open_for_write (rmi, &fli->m_cue_file, fli->m_cue_name);
 	if (rc != SR_SUCCESS) {
 	    fli->m_do_show = 0;
@@ -1550,7 +1556,7 @@ trim_filename (RIP_MANAGER_INFO* rmi, gchar* out, gchar *filename)
     long maxlen = fli->m_max_filename_length;
     mstrncpy (out, filename, MAX_TRACK_LEN);
     replace_invalid_chars (out);
-    out[maxlen-4] = 0;	// -4 = make room for ".mp3"
+    out[maxlen-mstrlen(fli->m_extension)] = 0; /* Make room for the native extension. */
 }
 
 static void

@@ -154,6 +154,7 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
 	    return http_sc_connect_internal (rmi, sock, redirect,
 				    proxyurl, info, useragent, if_name, redirects + 1);
 	} else {
+            g_strlcpy(info->effective_url, url, sizeof(info->effective_url));
             g_snprintf(rmi->stream_host, sizeof(rmi->stream_host),
                        strchr(target_info.host, ':') ? "[%s]:%d" : "%s:%d",
                        target_info.host, target_info.port);
@@ -585,6 +586,12 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     if (rc != SR_SUCCESS) return rc;
 
     memset(info, 0, sizeof(SR_HTTP_HEADER));
+    info->content_length = -1;
+    if (extract_header_value(header, stempbr, "Content-Length:", sizeof(stempbr))) {
+        char *end;
+        info->content_length = g_ascii_strtoll(stempbr, &end, 10);
+        if (*end || info->content_length < 0) return SR_ERROR_NO_RESPONSE_HEADER;
+    }
 
     debug_printf("http header:\n%s\n", header);
 
@@ -646,8 +653,15 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     /* interpret the content type from http header */
     rc = extract_header_value(header, stempbr, 
 	"Content-Type:", sizeof(stempbr));
+    for (char *mime = stempbr; *mime; mime++) *mime = g_ascii_tolower(*mime);
     if (rc == 0) {
 	info->content_type = CONTENT_TYPE_UNKNOWN;
+    }
+    else if (strstr(stempbr,"mpegurl") || strstr(stempbr,"vnd.apple.mpegurl")) {
+        info->content_type = CONTENT_TYPE_HLS;
+    }
+    else if (strstr(stempbr,"audio/flac") || strstr(stempbr,"audio/x-flac")) {
+        info->content_type = CONTENT_TYPE_FLAC;
     }
     else if (strstr(stempbr,"audio/mpeg")) {
 	info->content_type = CONTENT_TYPE_MP3;
@@ -658,7 +672,7 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     else if (strstr(stempbr,"misc/ultravox")) {
 	info->content_type = CONTENT_TYPE_ULTRAVOX;
     }
-    else if (strstr(stempbr,"application/ogg")) {
+    else if (strstr(stempbr,"application/ogg") || strstr(stempbr,"audio/ogg")) {
 	info->content_type = CONTENT_TYPE_OGG;
     }
     else if (strstr(stempbr,"audio/aac")) {
@@ -679,10 +693,17 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     /* Look at url for more content type hints */
     url_path_len = strlen(url_info.path);
     content_type_by_url = CONTENT_TYPE_UNKNOWN;
+    char *path_end = strpbrk(url_info.path, "?#");
+    if (path_end) *path_end = '\0';
+    url_path_len = strlen(url_info.path);
+    if (g_str_has_suffix(url_info.path, ".m3u8")) content_type_by_url = CONTENT_TYPE_HLS;
+    else if (g_str_has_suffix(url_info.path, ".flac")) content_type_by_url = CONTENT_TYPE_FLAC;
     if (url_path_len >= 4) {
 	if (!strcmp (&url_info.path[url_path_len-4], ".aac")) {
 	    content_type_by_url = CONTENT_TYPE_AAC;
 	} else if (!strcmp (&url_info.path[url_path_len-4], ".ogg")) {
+	    content_type_by_url = CONTENT_TYPE_OGG;
+	} else if (!strcmp (&url_info.path[url_path_len-4], ".oga")) {
 	    content_type_by_url = CONTENT_TYPE_OGG;
 	} else if (!strcmp (&url_info.path[url_path_len-4], ".mp3")) {
 	    content_type_by_url = CONTENT_TYPE_MP3;
@@ -694,6 +715,10 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
 	    content_type_by_url = CONTENT_TYPE_M3U;
 	}
     }
+
+    /* Traditional .m3u station lists also use mpegurl MIME types. */
+    if (content_type_by_url == CONTENT_TYPE_M3U && info->content_type == CONTENT_TYPE_HLS)
+        info->content_type = CONTENT_TYPE_M3U;
 
     // Try to guess the server
 

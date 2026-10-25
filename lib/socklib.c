@@ -172,6 +172,7 @@ socklib_open (HSOCKET *socket_handle, char *host, int port,
     socket_handle->chunk_done = FALSE;
     socket_handle->chunk_crlf = FALSE;
     socket_handle->chunk_remaining = 0;
+    socket_handle->prefetched_size = 0;
 #ifdef HAVE_OPENSSL
     socket_handle->tls = NULL;
     socket_handle->proxy_tls = NULL;
@@ -513,8 +514,8 @@ socklib_read_header(RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 }
 
 static error_code
-socklib_recv_raw (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
-		 char* buffer, int size, int timeout)
+socklib_recv_raw_mode (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
+		 char* buffer, int size, int timeout, BOOL some)
 {
     int ret = 0, read = 0;
     SOCKET sock;
@@ -584,9 +585,16 @@ socklib_recv_raw (RIP_MANAGER_INFO* rmi, HSOCKET *socket_handle,
 
 	read += ret;
 	size -= ret;
+        if (some) break;
     }
 
     return read;
+}
+
+static error_code socklib_recv_raw(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
+                                   char *buffer, int size, int timeout)
+{
+    return socklib_recv_raw_mode(rmi, sock, buffer, size, timeout, FALSE);
 }
 
 /* Decode HTTP transfer framing before ICY's byte counters see the body. */
@@ -607,11 +615,20 @@ socklib_chunk_line (RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *line, int capaci
     return SR_ERROR_RECV_FAILED;
 }
 
-error_code
-socklib_recvall (RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *buffer, int size, int timeout)
+static error_code
+socklib_recv_internal (RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *buffer, int size, int timeout, BOOL some)
 {
     int total = 0;
-    if (!sock->chunked) return socklib_recv_raw(rmi, sock, buffer, size, timeout);
+    if (sock->prefetched_size) {
+        unsigned int count = MIN((unsigned int)size, sock->prefetched_size);
+        memcpy(buffer, sock->prefetched, count);
+        sock->prefetched_size -= count;
+        memmove(sock->prefetched, sock->prefetched + count, sock->prefetched_size);
+        if (some || (int)count == size) return count;
+        int rc = socklib_recv_internal(rmi, sock, buffer + count, size - count, timeout, some);
+        return rc < 0 ? rc : (int)count + rc;
+    }
+    if (!sock->chunked) return socklib_recv_raw_mode(rmi, sock, buffer, size, timeout, some);
     while (size > 0 && !sock->chunk_done) {
         int rc, count;
         if (!sock->chunk_remaining) {
@@ -649,15 +666,26 @@ socklib_recvall (RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *buffer, int size, i
             }
         }
         count = sock->chunk_remaining < (guint64)size ? (int)sock->chunk_remaining : size;
-        rc = socklib_recv_raw(rmi, sock, buffer + total, count, timeout);
+        rc = socklib_recv_raw_mode(rmi, sock, buffer + total, count, timeout, some);
         if (rc < 0) return rc;
-        if (rc != count) return SR_ERROR_RECV_FAILED;
+        if ((!some && rc != count) || rc == 0) return SR_ERROR_RECV_FAILED;
         total += rc;
         size -= rc;
         sock->chunk_remaining -= rc;
         if (!sock->chunk_remaining) sock->chunk_crlf = TRUE;
+        if (some) break;
     }
     return total;
+}
+
+error_code socklib_recvall(RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *buffer, int size, int timeout)
+{
+    return socklib_recv_internal(rmi, sock, buffer, size, timeout, FALSE);
+}
+
+error_code socklib_recv_some(RIP_MANAGER_INFO *rmi, HSOCKET *sock, char *buffer, int size, int timeout)
+{
+    return socklib_recv_internal(rmi, sock, buffer, size, timeout, TRUE);
 }
 
 int

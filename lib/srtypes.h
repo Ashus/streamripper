@@ -121,6 +121,8 @@ typedef int error_code;
 #define CONTENT_TYPE_PLS		6
 #define CONTENT_TYPE_M3U		7
 #define CONTENT_TYPE_UNKNOWN		99
+#define CONTENT_TYPE_FLAC             8
+#define CONTENT_TYPE_HLS              9
 
 /* 
  * IO_DATA_INPUT is a interface for socket input data, it has one 
@@ -233,6 +235,8 @@ typedef struct HSOCKETst
         BOOL chunk_done;
         BOOL chunk_crlf;
         guint64 chunk_remaining;
+        unsigned char prefetched[64];
+        unsigned int prefetched_size;
 #ifdef HAVE_OPENSSL
         void *tls;
         void *proxy_tls;             /* Outer TLS retained beneath a CONNECT tunnel */
@@ -257,6 +261,8 @@ typedef struct SR_HTTP_HEADERst
 {
     int content_type;
     int meta_interval;
+    gint64 content_length;
+    char effective_url[MAX_URL_LEN];
     int have_icy_name;
     char icy_name[MAX_ICY_STRING];
     int icy_code;
@@ -487,6 +493,7 @@ struct stream_prefs
 {
     BOOL metadata_log;
     BOOL reload_rules;
+    int hls_variant; /* 0: best, -1: worst, positive: target bandwidth */
     guint64 incomplete_min_duration_ms;
     BOOL tls_insecure;
     BOOL http10;
@@ -551,6 +558,8 @@ typedef void(*RIP_MANAGER_CALLBACK)(RIP_MANAGER_INFO* rmi,
 struct RIP_MANAGER_INFOst
 {
     STREAM_PREFS *prefs;
+    struct stream_capture *capture;
+    BOOL flac_in_ogg;
     char streamname[MAX_STREAMNAME_LEN];
     char server_name[MAX_SERVER_LEN];
     char stream_host[MAX_URL_LEN];

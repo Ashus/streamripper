@@ -59,6 +59,7 @@
 #include "http.h"
 #include "callback.h"
 #include "console_output.h"
+#include "stream_capture.h"
 
 /******************************************************************************
  * Private functions
@@ -326,6 +327,10 @@ ripthread (void *thread_arg)
 	    //post_error (rmi, SR_ERROR_MAX_BYTES_RIPPED);
 	    break;
 	}
+        else if (ret == SR_SUCCESS_END_OF_STREAM) {
+            destroy_subsystems(rmi);
+            break;
+        }
 	else if (ret == SR_SUCCESS_BUFFERING) {
 	    callback_post_status (rmi, RM_STATUS_BUFFERING);
 	    /* Fall through */
@@ -335,7 +340,8 @@ ripthread (void *thread_arg)
 	    continue;
 	}
 	else if (retryable_error(ret) && GET_AUTO_RECONNECT(rmi->prefs->flags)) {
-            destroy_subsystems(rmi);
+            BOOL preserve_hls = stream_capture_is_hls(rmi);
+            if (!preserve_hls) destroy_subsystems(rmi);
             while (rmi->started && !g_atomic_int_get(&rmi->stopped)) {
                 guint64 delay = MAX(G_GUINT64_CONSTANT(5), rmi->retry_after_seconds);
                 char *reason = g_strdup(errors_get_string(ret));
@@ -345,7 +351,7 @@ ripthread (void *thread_arg)
                                   reason, delay);
                 g_free(reason);
                 if (!wait_for_retry(rmi, delay)) break;
-                ret = start_ripping(rmi);
+                ret = preserve_hls ? SR_SUCCESS : start_ripping(rmi);
                 if (ret == SR_SUCCESS) break;
                 destroy_subsystems(rmi);
                 if (!retryable_error(ret)) {
@@ -397,6 +403,7 @@ destroy_subsystems (RIP_MANAGER_INFO* rmi)
     /* GCS Feb 17,2008.  The socklib_cleanup() is done at program 
        shutdown, not rip_manager shutdown. */
     // socklib_cleanup();
+    stream_capture_destroy(rmi);
     filelib_shutdown (rmi);
     framed_audio_counter_free(&rmi->callback_audio_clock);
     ripstream_destroy (rmi);
@@ -459,6 +466,9 @@ start_ripping (RIP_MANAGER_INFO* rmi)
 	debug_printf ("http_sc_connect() returned error\n");
 	goto RETURN_ERR;
     }
+    rmi->flac_in_ogg = FALSE;
+    ret = stream_capture_prepare(rmi);
+    if (ret != SR_SUCCESS) goto RETURN_ERR;
 
     /* If the icy_name exists, but is empty, set to a bogus name so 
        that we can create the directory correctly, etc. */
@@ -489,7 +499,7 @@ start_ripping (RIP_MANAGER_INFO* rmi)
 	     rmi->prefs->count_start,
 	     GET_KEEP_INCOMPLETE(rmi->prefs->flags),
 	     GET_SINGLE_FILE_OUTPUT(rmi->prefs->flags),
-	     rmi->http_info.content_type, 
+	     stream_capture_file_type(rmi),
 	     rmi->prefs->output_directory,
 	     rmi->prefs->output_pattern,
 	     rmi->prefs->showfile_pattern,

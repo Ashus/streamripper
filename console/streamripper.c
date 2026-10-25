@@ -369,6 +369,7 @@ print_usage (FILE* stream)
     print_usage_option(stream, "-u, --user-agent USERAGENT", "Set the HTTP User-Agent");
     print_usage_option(stream, "-p, --proxy URL", "Use an HTTP or HTTPS proxy");
     print_usage_option(stream, "--http10", "Request HTTP/1.0 instead of HTTP/1.1");
+    print_usage_option(stream, "--hls-variant=VALUE", "HLS: best (default), worst, or bits/s");
 #if !defined (WIN32)
     print_usage_option(stream, "-I, --interface INTERFACE", "Use the specified network interface");
 #endif
@@ -760,6 +761,20 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
     }
 
     /* Logging options */
+    if (g_str_has_prefix(rule, "hls-variant=")) {
+        const char *value = rule + strlen("hls-variant=");
+        char *end;
+        gint64 bandwidth = g_ascii_strtoll(value, &end, 10);
+        if (!strcmp(value, "best")) prefs->hls_variant = 0;
+        else if (!strcmp(value, "worst")) prefs->hls_variant = -1;
+        else if (*value && !*end && bandwidth > 0 && bandwidth <= G_MAXINT)
+            prefs->hls_variant = (int)bandwidth;
+        else {
+            sr_console_printf(stderr, "Invalid --hls-variant; use best, worst, or a positive bandwidth in bits/s.\n");
+            exit(EXIT_FAILURE);
+        }
+        return;
+    }
     if (!strcmp(rule, "reload-rules")) {
         prefs->reload_rules = TRUE;
         return;

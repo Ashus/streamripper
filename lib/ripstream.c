@@ -40,6 +40,7 @@
 #include "ripogg.h"
 #include "track_info.h"
 #include "callback.h"
+#include "stream_capture.h"
 
 /*****************************************************************************
  * Private functions
@@ -56,6 +57,7 @@ error_code
 ripstream_rip (RIP_MANAGER_INFO* rmi)
 {
     /* Main loop for ripping */
+    if (rmi->capture) return stream_capture_rip(rmi);
     if (rmi->http_info.content_type == CONTENT_TYPE_OGG) {
 	return ripstream_ogg_rip (rmi);
     } else {
