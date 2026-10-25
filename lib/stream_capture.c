@@ -52,6 +52,7 @@ struct stream_capture {
     unsigned char cached_key[16];
     unsigned char prefix[4];
     guint prefix_size;
+    char display_title[MAX_TRACK_LEN];
 };
 
 static error_code invalid(const char *message)
@@ -372,11 +373,14 @@ static error_code write_capture(RIP_MANAGER_INFO *rmi, const unsigned char *data
         ti->save_track = TRUE;
         ti->have_track_info = TRUE;
         gstring_from_string(rmi, ti->title, MAX_TRACK_LEN, rmi->streamname, CODESET_METADATA);
-        rc = callback_start_track(rmi, ti);
+        TRACK_INFO display;
+        track_info_clear(&display);
+        rc = callback_start_track(rmi, &display);
         if (rc != SR_SUCCESS) return rc;
         rmi->callback_incomplete = FALSE;
         rmi->callback_filtered = FALSE;
-        g_strlcpy(rmi->callback_filename, rmi->streamname, sizeof(rmi->callback_filename));
+        g_strlcpy(rmi->callback_filename, state->display_title[0] ? state->display_title : "-",
+                  sizeof(rmi->callback_filename));
         if (state->hls && state->aac) rmi->filelib_info.m_extension = m_(".aac");
         rc = filelib_start(rmi, &state->writer, ti);
         if (rc != SR_SUCCESS) return rc;
@@ -505,6 +509,9 @@ static error_code rip_flac(RIP_MANAGER_INFO *rmi)
                 mchar decoded[MAX_TRACK_LEN];
                 gstring_from_string(rmi, decoded, MAX_TRACK_LEN, title, CODESET_METADATA);
                 filelib_log_metadata(rmi, decoded);
+                g_strlcpy(state->display_title, decoded, sizeof(state->display_title));
+                g_strlcpy(rmi->callback_filename, decoded[0] ? decoded : "-",
+                          sizeof(rmi->callback_filename));
             }
         }
         state->icy_remaining = rmi->meta_interval;

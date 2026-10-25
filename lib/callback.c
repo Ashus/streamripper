@@ -91,8 +91,12 @@ callback_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti)
     mchar console_string[SR_MAX_PATH];
 
     /* Compose the string for the console output */
-    msnprintf (console_string, SR_MAX_PATH, m_S m_(" - ") m_S, 
-	       ti->artist, ti->title);
+    if (!ti->artist[0] && !ti->title[0]) {
+        mstrcpy(console_string, m_("-"));
+    } else {
+        msnprintf (console_string, SR_MAX_PATH, m_S m_(" - ") m_S,
+                   ti->artist, ti->title);
+    }
     rmi->callback_filesize = 0;
     rmi->callback_incomplete = rmi->track_count < rmi->prefs->dropcount;
     rmi->callback_filtered = !ti->save_track;

@@ -283,7 +283,7 @@ print_status (RIP_MANAGER_INFO *rmi)
 			  "stream: %s\n",
 			  rmi->stream_host,
 			  rmi->server_name,
-			  rmi->streamname);
+			  rmi->http_info.have_icy_name ? rmi->streamname : "Unknown station");
 	if (rmi->http_bitrate > 0) {
 	    print_to_console ("declared bitrate: %d\n",
 			      rmi->http_bitrate);

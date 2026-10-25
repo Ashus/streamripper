@@ -478,7 +478,8 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     /* If the icy_name exists, but is empty, set to a bogus name so 
        that we can create the directory correctly, etc. */
     if (strlen(rmi->http_info.icy_name) == 0) {
-	strcpy (rmi->http_info.icy_name, "Streamripper_rips");
+	rmi->http_info.have_icy_name = FALSE;
+	strcpy (rmi->http_info.icy_name, "Unknown station");
     }
 
     /* Set the ripinfo struct from the data we now know about the 

@@ -122,7 +122,10 @@ def main():
                     return
                 self.send_response(200)
                 self.send_header('Content-Type', mime)
-                self.send_header('icy-name', 'Capture Test')
+                if path == '/empty-name.flac':
+                    self.send_header('icy-name', '')
+                elif path not in ('/unnamed.m3u8', '/unnamed.flac'):
+                    self.send_header('icy-name', 'Capture Test')
                 if path == '/icy.flac':
                     self.send_header('icy-metaint', '64')
                 chunked = path in ('/chunked.flac', '/chunked.ts')
@@ -179,6 +182,9 @@ def main():
         resources['/badmap.m3u8'] = playlist(['s1.ts'], prefix='#EXT-X-MAP:URI="init.mp4"\n'), 'application/vnd.apple.mpegurl'
         resources['/badbody.m3u8'] = playlist(['native.flac']), 'application/vnd.apple.mpegurl'
         resources['/native.flac'] = native, 'audio/flac'
+        resources['/unnamed.flac'] = native, 'audio/flac'
+        resources['/empty-name.flac'] = native, 'audio/flac'
+        resources['/unnamed.m3u8'] = playlist(['s1.ts']), 'application/vnd.apple.mpegurl'
         resources['/upper'] = native, 'Audio/FLAC'
         resources['/empty.flac'] = b'', 'audio/flac'
         resources['/chunked.flac'] = native, 'audio/x-flac'
@@ -271,7 +277,17 @@ def main():
         record('bad key', '/badkey.m3u8', None, '.ts', diagnostic='recording limit')
         record('bad padding', '/badpadding.m3u8', None, '.ts', diagnostic='decryption failed')
         record('bad container', '/badbody.m3u8', None, '.ts', diagnostic='expected MPEG-TS')
-        record('native FLAC', '/native.flac', native, '.flac', secure=True)
+        log = record('native FLAC', '/native.flac', native, '.flac', secure=True)
+        assert 'stream: Capture Test' in log and '] - [' in log, log
+        assert '] Capture Test [' not in log, log
+        for label, path, body, extension in (
+                ('unnamed HLS', '/unnamed.m3u8', packets[0], '.ts'),
+                ('unnamed FLAC', '/unnamed.flac', native, '.flac'),
+                ('empty station name', '/empty-name.flac', native, '.flac')):
+            log = record(label, path, body, extension)
+            assert 'stream: Unknown station' in log and '] - [' in log, log
+            files = list((root / ('Žluťoučký ' + label)).rglob('*' + extension))
+            assert 'Unknown station' in files[0].name, files
         record('case-insensitive MIME', '/upper', native, '.flac')
         record('traditional M3U', '/stations.m3u', native, '.flac')
         record('empty FLAC', '/empty.flac', None, '.flac', diagnostic='missing FLAC stream header')
@@ -279,7 +295,8 @@ def main():
         record('continuous FLAC', '/native.flac', native, '.flac', ['-A', '-a', 'continuous'])
         record('continuous HLS', '/high.m3u8', packets[1], '.ts', ['-A', '-a', 'continuous'])
         record('Ogg FLAC', '/ogg', ogg, '.oga')
-        record('ICY FLAC', '/icy.flac', native, '.flac', ['--metadata-log'])
+        log = record('ICY FLAC', '/icy.flac', native, '.flac', ['--metadata-log'])
+        assert 'Artist - Song 0' in log, log
         record('interrupted FLAC', '/live.flac', native, '.flac', ['-l', '1', '--incomplete-min-duration=15m'], incomplete=True)
         record('short HLS', '/endless.m3u8', None, '.ts', ['-l', '1', '--incomplete-min-duration=15m'], diagnostic='Discarded incomplete recording')
         record('rules rejected', '/native.flac', None, '.flac', ['-w', str(root / 'rules.txt')],
