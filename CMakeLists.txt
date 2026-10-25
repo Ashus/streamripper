@@ -143,4 +143,7 @@ ENDIF ()
 ##-----------------------------------------------------------------------------
 ##  Install
 ##-----------------------------------------------------------------------------
-INSTALL(TARGETS streamripper DESTINATION bin)
+INSTALL(TARGETS streamripper DESTINATION bin COMPONENT Runtime)
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  INCLUDE (cmake/DebianPackaging.cmake)
+ENDIF ()
