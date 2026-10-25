@@ -154,3 +154,141 @@ samples as having no license restrictions:
 
 The optional test-only LAME encoder creates a mono MP3 from the public WAV sample.
 It is not a runtime dependency and is not packaged in `dist`.
+
+## Runtime implementation notes
+
+These details complement the user-facing behavior described in [README.md](README.md).
+
+### TLS and transport
+
+OpenSSL negotiates algorithms supported by both endpoints. The release was tested with:
+
+- TLS 1.2: `ECDHE-ECDSA-AES128-GCM-SHA256`, X25519 key exchange, `ecdsa_secp256r1_sha256` signatures.
+- TLS 1.3: `TLS_AES_256_GCM_SHA384`, X25519MLKEM768 key exchange, RSA-PSS and ECDSA signatures.
+
+ECDSA authenticates the server; ephemeral ECDHE/key exchange provides forward
+secrecy. Supporting PFS does not imply every TLS 1.2 peer will select it: that
+depends on negotiation and the server's configuration. Use `--tls-info` to inspect
+a particular connection.
+
+The HTTPS integration tests use local servers and generated RSA/ECDSA
+certificates. They cover certificate verification, explicit verification bypass,
+custom CA files, ECDHE/ECDSA with TLS 1.2, TLS 1.3, and redirects. Proxy tests check
+certificate identities independently for the proxy and origin TLS layers.
+See the [Windows tests](BUILDING-WINDOWS.md#tests) or
+[Linux tests](BUILDING-LINUX.md#tests) for commands and requirements.
+
+Each redirect opens the appropriate proxy connection and, for HTTPS stations, a
+new CONNECT tunnel. `--http10` affects the station GET request; CONNECT uses
+HTTP/1.1. CONNECT responses are bounded and timed out, and unsuccessful proxy
+authentication is reported as HTTP 407.
+
+HTTP and HTTPS streams support both IPv4 and IPv6. Hostnames are resolved with
+`getaddrinfo()`; connection attempts are staggered by 250 ms so a slow or
+unreachable address does not block trying the next one. Pending TCP attempts
+share the connection timeout (`--timeout`); DNS lookup is outside that
+timeout. The first successful TCP connection is used, and other attempts close.
+TLS verification still checks the original hostname or the literal IP address.
+
+Stream requests use HTTP/1.1 by default, with `Host`, `Accept: */*`,
+`Cache-Control: no-cache`, the configured `User-Agent`, `Icy-Metadata: 1`, and
+`Connection: close`. `--http10` changes the request version to HTTP/1.0.
+The relay responds with `ICY 200 OK`. The retained page-request helper uses
+HTTP/1.1, a Chrome/152 browser User-Agent, `Accept-Encoding: identity`, and
+`Connection: close`; it is not called by the current CLI recording path.
+
+HTTP/1.1 chunked bodies are decoded before ICY metadata parsing. Redirects allow
+relative locations and at most ten hops. GLib GUri preserves query strings,
+explicit ports and percent encoding. HTTPS uses OpenSSL with SNI and separate
+certificate and hostname/IP verification for each TLS endpoint.
+
+### Console and metadata conversion
+
+Windows console output uses the Unicode `WriteConsoleW` API, independently of
+the active code page; `chcp 65001` is not required. Redirected output and Linux
+console output use UTF-8. Command-line arguments use UTF-8. File operations use Windows
+Unicode APIs, including directory enumeration for sequence numbering;
+`--codeset-filesys` does not change those operations.
+
+Metadata encoding is checked for each update before rule processing, allowing
+UTF-8 and legacy titles to alternate within one connection. The AUTO fallback
+policy is documented under [metadata encoding](README.md#metadata-encoding).
+
+The status shows incoming MP3/AAC audio duration instead of byte size, including
+excluded tracks and MP3 input recorded as WAV. It uses complete audio-frame
+sample counts, not elapsed download time or a bitrate estimate. The display is
+`MM:SS`, or `H:MM:SS` from one hour onward, rounded down to whole seconds.
+When duration is unavailable (including native Ogg input), the display falls
+back to received byte size, for example `75kB` or `14,81MB`. Units are decimal
+(1 kB = 1000 bytes, 1 MB = 1000000 bytes); smaller values use `B`.
+The counter resets when the displayed track changes; metadata timing and split
+padding can make it differ from the final file's duration.
+
+Interactive status lines adapt to the terminal's visible width, including after
+resizing. Titles use the remaining columns and old text is cleared when they
+shrink. Wide Unicode characters and combining marks are counted by display
+width. Redirected output retains a fixed 50-column title limit.
+
+### Allocation, duration and finalization
+
+Audio outputs automatically reserve disk space in 2 MiB increments to reduce
+fragmentation during recording. Windows uses allocation-size reservations; the
+Linux implementation uses `fallocate(FALLOC_FL_KEEP_SIZE)` where supported,
+including ext4. Reservations do not change the readable file length or add audio
+padding. Unused space is released during normal finalization. If reservation
+fails or is unsupported, recording continues with ordinary writes.
+
+This applies to individual MP3/AAC/Ogg/WAV recordings and continuous audio files,
+not CUE files or metadata logs. It does not guarantee contiguous allocation or
+defragment existing files. Linux preallocation and recording cleanup have been
+validated on ext4 under Debian 13/WSL2. On Linux, forced termination can
+leave reserved blocks beyond EOF until the file is truncated to its actual size.
+
+The duration is measured from stored audio, rather than file size, bitrate
+estimates, or elapsed download time. MP3/AAC use complete frame sample counts,
+WAV uses the decoded PCM length, and Ogg Vorbis uses granule positions and the
+stream sample rate, including chained streams. A duration that cannot be
+determined, or a failed write/finalization/promotion, prevents automatic deletion.
+
+Individual AAC recordings retain only complete ADTS frames. Track boundaries are
+aligned to verified frame headers; a partial frame received when joining or
+stopping a stream is discarded. AAC stays in `.aac`, with no M4A muxer or FFmpeg
+dependency.
+
+MP3 and ADTS AAC individual recordings search decoded audio for a quiet split
+near each metadata change by default. AAC analysis uses FAAD2; recorded AAC
+frames are copied unchanged. `--xs-none` disables the search, while window,
+silence-length, offset and padding settings tune it. AAC uses the standard
+detector even with `--xs2` (the alternative detector is MP3-only). If AAC analysis
+fails or has insufficient data, recording retains the ADTS-aligned metadata
+boundary. This does not add AAC-to-WAV support.
+
+Ogg Vorbis recordings use logical-stream boundaries and their native metadata,
+without silence detection or trimming. A single uninterrupted logical stream
+does not itself identify individual songs.
+
+Individual MP3 recordings receive a fresh Xing/Info header with their own audio
+frame and byte counts when closed. Stale source Xing/Info/VBRI headers are removed.
+This supplies duration information for both CBR and VBR recordings; it does not
+add a seek table or reconstruct encoder delay/padding for gapless playback.
+The native parser handles MPEG-1/2/2.5 Layer III with indexed bitrates; free-format
+MP3 and other MPEG audio layers are not handled by this finalizer.
+Indexed MP3 audio is limited to 4 GiB per individual file, and a sample-rate or
+channel-count change within a file is rejected.
+
+Both formats retain the existing ID3v2.3 artist/title tags and add `TLEN`
+(duration in milliseconds) during finalization. `--no-id3` disables ID3 tags;
+`--without-id3v2` disables ID3v2 specifically. Raw AAC players may ignore ID3 tags.
+Compressed audio frames are copied without re-encoding.
+
+Finalization also covers the last open individual file left in `incomplete` on
+normal shutdown. Forced process termination or a power failure can prevent it.
+Continuous `--continuous-file` MP3/AAC recordings keep the original stream bytes and do not use
+this individual-file finalizer. WAV sizes are finalized separately; native Ogg
+recording remains page-based.
+
+Ogg FLAC finalization also clears the source PCM MD5, which describes the
+original stream rather than the recording. Source seek/cue offsets are replaced
+with padding; seeking uses rebuilt relative granules and FLAC frame numbers.
+HLS response limits are 1 MiB per playlist, 16 bytes per AES key and 128 MiB per
+segment. AES-128 CBC uses explicit or media-sequence-derived IVs.
