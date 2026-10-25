@@ -103,5 +103,6 @@ void filelib_log_metadata(RIP_MANAGER_INFO *rmi, const mchar *title);
 error_code filelib_finish_audio(Writer *writer);
 void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer);
 void filelib_update_ogg_duration(Writer *writer, const unsigned char *header, size_t size);
+error_code filelib_rewrite_at(FHANDLE file, guint64 offset, const unsigned char *data, gsize size);
 
 #endif //FILELIB

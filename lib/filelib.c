@@ -377,6 +377,26 @@ filelib_start (RIP_MANAGER_INFO* rmi, Writer *writer, TRACK_INFO* ti)
     }
 }
 
+error_code filelib_rewrite_at(FHANDLE file, guint64 offset, const unsigned char *data, gsize size)
+{
+    if (offset > G_MAXINT64) return SR_ERROR_CANT_WRITE_TO_FILE;
+#ifdef WIN32
+    LARGE_INTEGER zero, current, target;
+    zero.QuadPart = 0;
+    target.QuadPart = offset;
+    if (!SetFilePointerEx(file, zero, &current, FILE_CURRENT) ||
+        !SetFilePointerEx(file, target, NULL, FILE_BEGIN)) return SR_ERROR_CANT_WRITE_TO_FILE;
+    error_code rc = filelib_write(file, (char *)data, size);
+    if (!SetFilePointerEx(file, current, NULL, FILE_BEGIN)) return SR_ERROR_CANT_WRITE_TO_FILE;
+#else
+    off_t current = lseek(file, 0, SEEK_CUR);
+    if (current < 0 || lseek(file, (off_t)offset, SEEK_SET) < 0) return SR_ERROR_CANT_WRITE_TO_FILE;
+    error_code rc = filelib_write(file, (char *)data, size);
+    if (lseek(file, current, SEEK_SET) < 0) return SR_ERROR_CANT_WRITE_TO_FILE;
+#endif
+    return rc;
+}
+
 error_code
 filelib_write_cue (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti, int secs)
 {

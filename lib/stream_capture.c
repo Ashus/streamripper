@@ -22,6 +22,7 @@
 #include "track_info.h"
 #include "console_output.h"
 #include "charset.h"
+#include "ogg_flac_output.h"
 
 #define FETCH_LIMIT (128U * 1024U * 1024U)
 #define PLAYLIST_LIMIT (1024U * 1024U)
@@ -53,7 +54,49 @@ struct stream_capture {
     unsigned char prefix[4];
     guint prefix_size;
     char display_title[MAX_TRACK_LEN];
+    OggFlacOutput *ogg;
 };
+
+static error_code write_capture(RIP_MANAGER_INFO *rmi, const unsigned char *data, guint length);
+
+static error_code emit_ogg(void *context, const unsigned char *data, gsize size)
+{
+    return write_capture(context, data, size);
+}
+
+static error_code rewrite_ogg(void *context, guint64 offset, const unsigned char *data, gsize size)
+{
+    RIP_MANAGER_INFO *rmi = context;
+    struct stream_capture *state = rmi->capture;
+    error_code rc = SR_SUCCESS;
+    if (state->writer.m_started) rc = filelib_rewrite_at(state->writer.m_file, offset, data, size);
+    if (rc == SR_SUCCESS && rmi->filelib_info.m_do_show)
+        rc = filelib_rewrite_at(rmi->filelib_info.m_show_file, offset, data, size);
+    if (rc != SR_SUCCESS) state->writer.m_cleanup_blocked = TRUE;
+    return rc;
+}
+
+static void update_ogg_duration(RIP_MANAGER_INFO *rmi)
+{
+    struct stream_capture *state = rmi->capture;
+    guint64 milliseconds;
+    if (state->ogg && ogg_flac_output_duration(state->ogg, &milliseconds)) {
+        state->writer.m_duration_ms = milliseconds;
+        state->writer.m_duration_known = TRUE;
+        rmi->callback_duration_ms = milliseconds;
+        rmi->callback_duration_known = TRUE;
+    }
+}
+
+static error_code finish_ogg(RIP_MANAGER_INFO *rmi)
+{
+    struct stream_capture *state = rmi->capture;
+    if (!state->ogg) return SR_SUCCESS;
+    error_code rc = ogg_flac_output_finish(state->ogg);
+    update_ogg_duration(rmi);
+    if (rc != SR_SUCCESS) state->writer.m_cleanup_blocked = TRUE;
+    return rc;
+}
 
 static error_code invalid(const char *message)
 {
@@ -356,7 +399,13 @@ error_code stream_capture_prepare(RIP_MANAGER_INFO *rmi)
     state->remaining = rmi->stream_sock.chunked ? -1 : rmi->http_info.content_length;
     state->icy_remaining = rmi->http_info.meta_interval;
     state->hls = type == CONTENT_TYPE_HLS;
-    if (!state->hls) return SR_SUCCESS;
+    if (!state->hls) {
+        if (rmi->flac_in_ogg) {
+            state->ogg = ogg_flac_output_new(emit_ogg, rewrite_ogg, rmi);
+            if (!state->ogg) return SR_ERROR_CANT_ALLOC_MEMORY;
+        }
+        return SR_SUCCESS;
+    }
     GByteArray *body = NULL;
     error_code rc = read_body(rmi, &rmi->http_info, PLAYLIST_LIMIT, &body);
     if (rc == SR_SUCCESS) rc = load_playlist(rmi, body, rmi->http_info.effective_url);
@@ -532,6 +581,12 @@ static error_code rip_flac(RIP_MANAGER_INFO *rmi)
     }
     if (state->remaining > 0) state->remaining -= got;
     if (rmi->meta_interval > 0) state->icy_remaining -= got;
+    if (state->ogg) {
+        error_code rc = ogg_flac_output_write(state->ogg, data, got);
+        update_ogg_duration(rmi);
+        if (rc != SR_SUCCESS) state->writer.m_cleanup_blocked = TRUE;
+        return rc;
+    }
     guint offset = 0;
     if (!state->writer_open) {
         guint count = MIN((guint)got, 4 - state->prefix_size);
@@ -551,6 +606,10 @@ error_code stream_capture_rip(RIP_MANAGER_INFO *rmi)
 {
     struct stream_capture *state = rmi->capture;
     error_code rc = state->hls ? rip_hls(rmi) : rip_flac(rmi);
+    if (rc == SR_SUCCESS_END_OF_STREAM) {
+        error_code final_rc = finish_ogg(rmi);
+        if (final_rc != SR_SUCCESS) return final_rc;
+    }
     if (rc == SR_SUCCESS_END_OF_STREAM && state->writer.m_started) {
         rc = filelib_close(rmi, &state->writer);
         state->writer.m_started = FALSE;
@@ -575,12 +634,15 @@ void stream_capture_destroy(RIP_MANAGER_INFO *rmi)
 {
     struct stream_capture *state = rmi->capture;
     if (!state) return;
+    error_code final_rc = finish_ogg(rmi);
+    if (final_rc != SR_SUCCESS) callback_post_error(rmi, final_rc);
     if (state->writer.m_started) {
         error_code rc = filelib_close(rmi, &state->writer);
         if (rc != SR_SUCCESS) callback_post_error(rmi, rc);
         filelib_cleanup_incomplete(rmi, &state->writer);
     }
     if (state->segments) g_ptr_array_unref(state->segments);
+    ogg_flac_output_free(state->ogg);
     g_free(state->playlist);
     g_free(state->cached_key_url);
     g_free(state);

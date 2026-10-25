@@ -31,6 +31,7 @@ SET (STREAMRIPPER_LIB_SRC
 	ripogg.c ripogg.h
 	ripstream.c ripstream.h
 	stream_capture.c stream_capture.h
+	ogg_flac_output.c ogg_flac_output.h
 	ripstream_mp3.c ripstream_mp3.h
 	ripstream_wav.c ripstream_wav.h
 	ripstream_ogg.c

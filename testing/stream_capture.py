@@ -6,6 +6,9 @@ import collections
 import hashlib
 import http.server
 import socket
+import os
+import signal
+import sys
 import ssl
 import struct
 import subprocess
@@ -13,6 +16,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+import ogg_flac_checks
 
 
 def crc(data, bits, polynomial):
@@ -131,7 +135,7 @@ def main():
                 chunked = path in ('/chunked.flac', '/chunked.ts')
                 if chunked:
                     self.send_header('Transfer-Encoding', 'chunked')
-                elif path != '/live.flac':
+                elif path != '/live.flac' and not path.startswith('/live-ogg-'):
                     self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
                 try:
@@ -143,7 +147,7 @@ def main():
                     else:
                         self.wfile.write(body)
                         self.wfile.flush()
-                        if path == '/live.flac':
+                        if path == '/live.flac' or path.startswith('/live-ogg-'):
                             time.sleep(4)
                 except (BrokenPipeError, ConnectionResetError):
                     pass
@@ -190,6 +194,12 @@ def main():
         resources['/chunked.flac'] = native, 'audio/x-flac'
         resources['/live.flac'] = native, 'audio/flac'
         resources['/ogg'] = ogg, 'application/ogg'
+        resources['/ogg-offset'] = ogg_flac_checks.live_fixture(ogg), 'application/ogg'
+        resources['/ogg-seektable'] = ogg_flac_checks.seektable_fixture(ogg), 'application/ogg'
+        verbatim = ogg_flac_checks.verbatim_fixture(ogg)
+        resources['/ogg-spanning-frames'] = ogg_flac_checks.live_fixture(verbatim, split_frames=True), 'application/ogg'
+        resources['/live-ogg-page'] = ogg_flac_checks.live_fixture(ogg, 'partial-page'), 'application/ogg'
+        resources['/live-ogg-packet'] = ogg_flac_checks.live_fixture(ogg, 'partial-packet'), 'application/ogg'
         icy = bytearray()
         for i in range(0, len(native), 64):
             block = native[i:i + 64]
@@ -215,14 +225,41 @@ def main():
             threading.Thread(target=instance.serve_forever, daemon=True).start()
         resources['/stations.m3u'] = (f'#EXTM3U\nhttp://127.0.0.1:{server.server_port}/native.flac\n'.encode(), 'audio/x-mpegurl')
 
-        def record(label, path, expected, extension, options=(), secure=False, diagnostic=None, incomplete=False):
+        def record(label, path, expected, extension, options=(), secure=False, diagnostic=None, incomplete=False, close_console=False):
             output = root / ('Žluťoučký ' + label)
             url = f'{"https://localhost" if secure else "http://127.0.0.1"}:{tls.server_port if secure else server.server_port}{path}'
             command = [exe, url, '--output-directory=' + str(output), '--keep-incomplete',
                        '--tls-ca-file=' + str(certificate), *options]
             if label != 'retry':
                 command.append('-c')
-            result = subprocess.run(command, capture_output=True, timeout=25)
+            if close_console:
+                startup = {}
+                if os.name == 'nt':
+                    info = subprocess.STARTUPINFO()
+                    info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    info.wShowWindow = subprocess.SW_HIDE
+                    startup = dict(startupinfo=info, creationflags=subprocess.CREATE_NEW_CONSOLE)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **startup)
+                try:
+                    deadline = time.monotonic() + 5
+                    while not any(file.stat().st_size > 100 for file in output.rglob('*.oga')):
+                        assert time.monotonic() < deadline, 'No Ogg FLAC output before close'
+                        time.sleep(.05)
+                    time.sleep(.1)
+                    if os.name == 'nt':
+                        subprocess.run([sys.executable, str(Path(__file__).with_name('console_close.py')),
+                                        '--close', str(process.pid)], check=True, capture_output=True,
+                                       creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
+                    else:
+                        process.send_signal(signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=5)
+                    result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate()
+            else:
+                result = subprocess.run(command, capture_output=True, timeout=25)
             log = (result.stdout + result.stderr).decode('utf-8', errors='replace')
             assert result.returncode == 0, (label, log)
             if diagnostic:
@@ -232,7 +269,10 @@ def main():
                 assert not files, (label, files, log)
             else:
                 assert len(files) == 1, (label, files, log)
-                assert files[0].read_bytes() == expected, (label, files[0], log)
+                if extension == '.oga':
+                    ogg_flac_checks.check(files[0].read_bytes(), expected, args.flac, files[0])
+                else:
+                    assert files[0].read_bytes() == expected, (label, files[0], log)
                 stat = files[0].stat()
                 if hasattr(stat, 'st_blocks'):
                     assert stat.st_blocks * 512 < len(expected) + 65536, 'Unused allocation remains'
@@ -295,6 +335,15 @@ def main():
         record('continuous FLAC', '/native.flac', native, '.flac', ['-A', '-a', 'continuous'])
         record('continuous HLS', '/high.m3u8', packets[1], '.ts', ['-A', '-a', 'continuous'])
         record('Ogg FLAC', '/ogg', ogg, '.oga')
+        record('Ogg FLAC absolute timestamps', '/ogg-offset', ogg, '.oga')
+        record('Ogg FLAC stale seektable', '/ogg-seektable', ogg_flac_checks.seektable_fixture(ogg, padding=True), '.oga')
+        record('Ogg FLAC frames spanning pages', '/ogg-spanning-frames', verbatim, '.oga')
+        for path in ('/live-ogg-page', '/live-ogg-packet'):
+            record('interrupted ' + path[1:], path, ogg, '.oga', ['-l', '1'], incomplete=True)
+        record('Ogg FLAC continuous', '/ogg-offset', ogg, '.oga', ['-A', '-a', 'continuous'])
+        record('Ogg FLAC console close', '/live-ogg-packet', ogg, '.oga', incomplete=True, close_console=True)
+        record('short Ogg FLAC', '/live-ogg-page', None, '.oga', ['-l', '1', '--incomplete-min-duration=2s'],
+               diagnostic='Discarded incomplete recording (1 s < 2 s)')
         log = record('ICY FLAC', '/icy.flac', native, '.flac', ['--metadata-log'])
         assert 'Artist - Song 0' in log, log
         record('interrupted FLAC', '/live.flac', native, '.flac', ['-l', '1', '--incomplete-min-duration=15m'], incomplete=True)
@@ -306,7 +355,7 @@ def main():
         for instance in (server, tls):
             instance.shutdown()
             instance.server_close()
-    print('PASS: HLS variants/live/AES/retry/TLS, byte-exact native/Ogg/ICY FLAC, output cleanup')
+    print('PASS: HLS variants/live/AES/retry/TLS, native/ICY FLAC bytes, Ogg FLAC duration/seek/finalization, output cleanup')
 
 
 if __name__ == '__main__':
