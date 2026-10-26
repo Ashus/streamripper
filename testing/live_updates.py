@@ -161,6 +161,9 @@ try:
                 assert times[4] - times[3] >= 6.8, times
                 assert b"SR_ERROR_CANT_RESOLVE_HOSTNAME" in rec.err, rec.err
                 assert b"Retrying in 7 s" in rec.err, rec.err
+                interrupted = b"[incomplete... ] Artist - Original"
+                assert interrupted in rec.out, rec.out
+                assert rec.out.index(interrupted) < rec.out.index(b"[re-connecting..]"), rec.out
                 assert not (root / "recover/incomplete/.lock").exists()
                 print("PASS: dropped stream, DNS failure, HTTP 503/429, Retry-After and recovery", flush=True)
             finally:
@@ -170,6 +173,8 @@ try:
                 try:
                     rec.finish(10)
                     assert len(requests[path]) == count, (path, requests[path], rec.err)
+                    if path == "/disabled":
+                        assert b"[incomplete... ] Artist - Original" in rec.out, rec.out
                     print("PASS:", path, "stops without inappropriate retries", flush=True)
                 finally:
                     rec.kill()

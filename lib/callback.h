@@ -31,6 +31,7 @@
 #define RM_TRACK_DONE	0x06	// pull path of the track completed
 // RM_OUTPUT_DIR is now OBSOLETE
 #define RM_OUTPUT_DIR	0x07	// Full path of the output directory
+#define RM_TRACK_INTERRUPTED 0x08 // Current track interrupted before cleanup
 
 // The following are the possible status values for RIP_MANAGER_INFO
 #define RM_STATUS_BUFFERING		0x01

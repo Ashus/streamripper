@@ -361,6 +361,10 @@ rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data)
     case RM_NEW_TRACK:
 	print_to_console ("\n");
 	break;
+    case RM_TRACK_INTERRUPTED:
+        print_status(rmi);
+        print_to_console("\n");
+        break;
     case RM_STARTED:
 	m_started = TRUE;
 	break;

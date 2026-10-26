@@ -316,6 +316,17 @@ ripthread (void *thread_arg)
         ret = ripstream_rip(rmi);
 	debug_printf ("Did ripstream_rip\n");
 
+        /* Preserve the last track status before cleanup prints file results.
+           HLS retries retain the recording and do not interrupt its track. */
+        if (ret < 0 && ret != SR_ERROR_CANT_DECODE_MP3 &&
+            rmi->started && rmi->status == RM_STATUS_RIPPING &&
+            rmi->callback_filename[0] &&
+            !(stream_capture_is_hls(rmi) && retryable_error(ret) &&
+              GET_AUTO_RECONNECT(rmi->prefs->flags))) {
+            rmi->callback_incomplete = TRUE;
+            rmi->status_callback(rmi, RM_TRACK_INTERRUPTED, NULL);
+        }
+
 	if (!rmi->started) {
 	    break;
 	}
