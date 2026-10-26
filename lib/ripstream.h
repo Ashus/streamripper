@@ -1,6 +1,6 @@
 /* ripstream.h
  *
- * buffer stream data, when a track changes decodes the audio and 
+ * buffer stream data, when a track changes decodes the audio and
  * finds a silent point to split the track
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,22 +27,22 @@
 #include "socklib.h"
 
 error_code
-ripstream_init (RIP_MANAGER_INFO* rmi);
-error_code ripstream_rip (RIP_MANAGER_INFO* rmi);
-void ripstream_destroy (RIP_MANAGER_INFO* rmi);
+ripstream_init(RIP_MANAGER_INFO* rmi);
+error_code ripstream_rip(RIP_MANAGER_INFO* rmi);
+void ripstream_destroy(RIP_MANAGER_INFO* rmi);
 error_code
-ripstream_get_data (RIP_MANAGER_INFO* rmi, char *data_buf, char *track_buf);
-error_code 
-ripstream_put_data (RIP_MANAGER_INFO *rmi, char *buf, int size);
+ripstream_get_data(RIP_MANAGER_INFO* rmi, char* data_buf, char* track_buf);
 error_code
-ripstream_start_track (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti);
+ripstream_put_data(RIP_MANAGER_INFO* rmi, char* buf, int size);
 error_code
-ripstream_queue_writer (
-    RIP_MANAGER_INFO* rmi, 
-    TRACK_INFO* ti, 
+ripstream_start_track(RIP_MANAGER_INFO* rmi, TRACK_INFO* ti);
+error_code
+ripstream_queue_writer(
+    RIP_MANAGER_INFO* rmi,
+    TRACK_INFO* ti,
     Cbuf3_pointer start_byte
-);
+    );
 error_code
-ripstream_end_track (RIP_MANAGER_INFO* rmi, Writer *writer);
+ripstream_end_track(RIP_MANAGER_INFO* rmi, Writer* writer);
 
 #endif

@@ -71,23 +71,23 @@
 #define GET_ADD_ID3V2(flags)			(OPT_FLAG_ISSET(flags, OPT_ADD_ID3V2))
 
 /* Public functions */
-char *rip_manager_get_error_str(int code);
-//u_short rip_mananger_get_relay_port();	
-void set_rip_manager_options_defaults (STREAM_PREFS *m_opt);
-void rip_manager_init (void);
-error_code rip_manager_start (RIP_MANAGER_INFO **rmi, STREAM_PREFS *prefs,
-			      RIP_MANAGER_CALLBACK status_callback);
-void rip_manager_stop (RIP_MANAGER_INFO *rmi);
-void rip_manager_cleanup (void);
-error_code rip_manager_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti);
-error_code rip_manager_end_track (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti);
+char* rip_manager_get_error_str(int code);
+//u_short rip_mananger_get_relay_port();
+void set_rip_manager_options_defaults(STREAM_PREFS* m_opt);
+void rip_manager_init(void);
+error_code rip_manager_start(RIP_MANAGER_INFO** rmi, STREAM_PREFS* prefs,
+                             RIP_MANAGER_CALLBACK status_callback);
+void rip_manager_stop(RIP_MANAGER_INFO* rmi);
+void rip_manager_cleanup(void);
+error_code rip_manager_start_track(RIP_MANAGER_INFO* rmi, TRACK_INFO* ti);
+error_code rip_manager_end_track(RIP_MANAGER_INFO* rmi, TRACK_INFO* ti);
 //error_code rip_manager_put_data (RIP_MANAGER_INFO *rmi, char *buf, int size);
 //void rip_manager_post_status (RIP_MANAGER_INFO* rmi, int status);
 
 
 const char*
-overwrite_opt_to_string (enum OverwriteOpt oo);
-enum OverwriteOpt string_to_overwrite_opt (char* str);
-int rip_manager_get_content_type (RIP_MANAGER_INFO* rmi);
+overwrite_opt_to_string(enum OverwriteOpt oo);
+enum OverwriteOpt string_to_overwrite_opt(char* str);
+int rip_manager_get_content_type(RIP_MANAGER_INFO* rmi);
 
 #endif //__RIP_MANANGER_H__

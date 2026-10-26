@@ -41,7 +41,7 @@
    IS_ABSOLUTE_PATH(P)  tests whether P is an absolute path.  If it is not,
                         it may be concatenated to a directory pathname. */
 #if defined _WIN32 || defined __WIN32__ || defined __EMX__ || defined __DJGPP__
-  /* Win32, OS/2, DOS */
+/* Win32, OS/2, DOS */
 # define ISSLASH(C) ((C) == m_('/') || (C) == m_('\\'))
 # define HAS_DEVICE(P) \
     ((((P)[0] >= m_('A') && (P)[0] <= m_('Z')) \
@@ -51,7 +51,7 @@
 /* # define IS_ABSOLUTE_PATH(P) (ISSLASH ((P)[0]) || HAS_DEVICE (P)) */
 # define IS_ABSOLUTE_PATH(P) ISSLASH ((P)[0])
 #else
-  /* Unix */
+/* Unix */
 # define ISSLASH(C) ((C) == m_('/'))
 # define HAS_DEVICE(P) (0)
 # define IS_ABSOLUTE_PATH(P) ISSLASH ((P)[0])
@@ -69,40 +69,40 @@
 
 
 error_code
-filelib_init (RIP_MANAGER_INFO* rmi,
-	      BOOL do_individual_tracks,
-	      BOOL do_count,
-	      int count_start,
-	      BOOL keep_incomplete,
-	      BOOL do_show_file,
-	      int content_type,
-	      char* output_directory,
-	      char* output_pattern,
-	      char* showfile_pattern,
-	      int get_separate_dirs,
-	      int get_date_stamp,
-	      char* icy_name);
+filelib_init(RIP_MANAGER_INFO* rmi,
+             BOOL do_individual_tracks,
+             BOOL do_count,
+             int count_start,
+             BOOL keep_incomplete,
+             BOOL do_show_file,
+             int content_type,
+             char* output_directory,
+             char* output_pattern,
+             char* showfile_pattern,
+             int get_separate_dirs,
+             int get_date_stamp,
+             char* icy_name);
 error_code
-filelib_start (RIP_MANAGER_INFO* rmi, Writer *writer, TRACK_INFO* ti);
+filelib_start(RIP_MANAGER_INFO* rmi, Writer* writer, TRACK_INFO* ti);
 error_code
-filelib_write_track (Writer *writer, char *buf, u_long size);
+filelib_write_track(Writer* writer, char* buf, u_long size);
 error_code
-filelib_write_show (RIP_MANAGER_INFO* rmi, char *buf, u_long size);
-error_code filelib_write_cue (RIP_MANAGER_INFO* rmi, TRACK_INFO* ti, int secs);
+filelib_write_show(RIP_MANAGER_INFO* rmi, char* buf, u_long size);
+error_code filelib_write_cue(RIP_MANAGER_INFO* rmi, TRACK_INFO* ti, int secs);
 error_code
-filelib_close (
+filelib_close(
     RIP_MANAGER_INFO* rmi,
-    Writer *writer
-);
+    Writer* writer
+    );
 error_code
-filelib_rename_to_complete (
+filelib_rename_to_complete(
     RIP_MANAGER_INFO* rmi,
-    Writer *writer);
-void filelib_shutdown (RIP_MANAGER_INFO* rmi);
-void filelib_log_metadata(RIP_MANAGER_INFO *rmi, const mchar *title);
-error_code filelib_finish_audio(Writer *writer);
-void filelib_cleanup_incomplete(RIP_MANAGER_INFO *rmi, Writer *writer);
-void filelib_update_ogg_duration(Writer *writer, const unsigned char *header, size_t size);
-error_code filelib_rewrite_at(FHANDLE file, guint64 offset, const unsigned char *data, gsize size);
+    Writer* writer);
+void filelib_shutdown(RIP_MANAGER_INFO* rmi);
+void filelib_log_metadata(RIP_MANAGER_INFO* rmi, const mchar* title);
+error_code filelib_finish_audio(Writer* writer);
+void filelib_cleanup_incomplete(RIP_MANAGER_INFO* rmi, Writer* writer);
+void filelib_update_ogg_duration(Writer* writer, const unsigned char* header, size_t size);
+error_code filelib_rewrite_at(FHANDLE file, guint64 offset, const unsigned char* data, gsize size);
 
 #endif //FILELIB

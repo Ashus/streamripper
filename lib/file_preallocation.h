@@ -13,7 +13,7 @@ typedef struct {
     gboolean disabled;
 } AudioFileAllocation;
 
-void audio_file_reserve(FHANDLE file, AudioFileAllocation *allocation, gsize size);
-void audio_file_release(FHANDLE file, AudioFileAllocation *allocation);
+void audio_file_reserve(FHANDLE file, AudioFileAllocation* allocation, gsize size);
+void audio_file_release(FHANDLE file, AudioFileAllocation* allocation);
 
 #endif

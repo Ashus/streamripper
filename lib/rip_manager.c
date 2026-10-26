@@ -18,11 +18,11 @@
  * Rip Manager API
  *
  *   Callback Function
- *     void (*status_callback)(RIP_MANAGER_INFO* rmi, 
+ *     void (*status_callback)(RIP_MANAGER_INFO* rmi,
  *                              int message, void *data));
  *   Functions
  *     void rip_manager_init (void);
- *     error_code rip_manager_start (RIP_MANAGER_INFO **rmi, 
+ *     error_code rip_manager_start (RIP_MANAGER_INFO **rmi,
  *	  STREAM_PREFS *prefs, RIP_MANAGER_CALLBACK status_callback);
  *     void rip_manager_stop (RIP_MANAGER_INFO *rmi);
  *     void rip_manager_cleanup (void);
@@ -64,15 +64,15 @@
 /******************************************************************************
  * Private functions
  *****************************************************************************/
-static void ripthread (void *thread_arg);
-static error_code start_ripping (RIP_MANAGER_INFO* rmi);
-void destroy_subsystems (RIP_MANAGER_INFO* rmi);
+static void ripthread(void* thread_arg);
+static error_code start_ripping(RIP_MANAGER_INFO* rmi);
+void destroy_subsystems(RIP_MANAGER_INFO* rmi);
 
 /******************************************************************************
  * Private Vars
  *****************************************************************************/
 static const char* overwrite_opt_strings[] = {
-    "",		// UNKNOWN
+    "", // UNKNOWN
     "always",
     "never",
     "larger",
@@ -83,31 +83,30 @@ static const char* overwrite_opt_strings[] = {
  * Public functions
  *****************************************************************************/
 void
-rip_manager_init (void)
-{
-    errors_init ();
+rip_manager_init(void) {
+    errors_init();
     socklib_init();
 }
 
-/** Create a RMI structure and start the ripping thread. 
+/** Create a RMI structure and start the ripping thread.
     \callgraph
     \callergraph
 */
 error_code
-rip_manager_start (RIP_MANAGER_INFO **rmip,
-		   STREAM_PREFS *prefs,
-		   RIP_MANAGER_CALLBACK status_callback)
-{
+rip_manager_start(RIP_MANAGER_INFO** rmip,
+                  STREAM_PREFS* prefs,
+                  RIP_MANAGER_CALLBACK status_callback) {
     RIP_MANAGER_INFO* rmi;
     int rc;
 
     if (!prefs || !rmip) {
-	return SR_ERROR_INVALID_PARAM;
+        return SR_ERROR_INVALID_PARAM;
     }
 
-    rmi = (*rmip) = (RIP_MANAGER_INFO*) malloc (sizeof(RIP_MANAGER_INFO));
-    if (!rmi) return SR_ERROR_CANT_ALLOC_MEMORY;
-    memset (rmi, 0, sizeof(RIP_MANAGER_INFO));
+    rmi = (*rmip) = (RIP_MANAGER_INFO*)malloc(sizeof(RIP_MANAGER_INFO));
+    if (!rmi)
+        return SR_ERROR_CANT_ALLOC_MEMORY;
+    memset(rmi, 0, sizeof(RIP_MANAGER_INFO));
     rmi->stream_sock.closed = TRUE;
     rmi->filelib_info.m_show_file = INVALID_FHANDLE;
     rmi->filelib_info.m_cue_file = INVALID_FHANDLE;
@@ -122,7 +121,7 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
     }
 #endif
 
-    register_codesets (rmi, &prefs->cs_opt);
+    register_codesets(rmi, &prefs->cs_opt);
 
     /* From select() man page:
        On systems that lack pselect() reliable (and more
@@ -131,12 +130,12 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
        itored by select() in the main program.
     */
 #if __UNIX__
-    rc = pipe (rmi->abort_pipe);
+    rc = pipe(rmi->abort_pipe);
     if (rc != 0) {
         threadlib_destroy_sem(&rmi->started_sem);
         free(rmi);
         *rmip = NULL;
-	return SR_ERROR_CREATE_PIPE_FAILED;
+        return SR_ERROR_CREATE_PIPE_FAILED;
     }
 #endif
 
@@ -146,7 +145,7 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
     rmi->write_data = 1;
 
     /* Initialize the parsing rules */
-    /* GCS FIX: parser_free() would need to be freed by the caller.  
+    /* GCS FIX: parser_free() would need to be freed by the caller.
        But he has no cleanup routine to call! */
     if (!init_metadata_parser(rmi, prefs->rules_file)) {
         parser_free(rmi);
@@ -161,10 +160,10 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
     }
 
     /* Start the ripping thread */
-    debug_printf ("Pre ripthread: %s\n", rmi->prefs->url);
+    debug_printf("Pre ripthread: %s\n", rmi->prefs->url);
     rmi->started = 1;
-    rc = threadlib_beginthread (&rmi->hthread_ripper,
-				  ripthread, (void*) rmi);
+    rc = threadlib_beginthread(&rmi->hthread_ripper,
+                               ripthread, (void*)rmi);
     if (rc != SR_SUCCESS) {
         parser_free(rmi);
         threadlib_destroy_sem(&rmi->started_sem);
@@ -183,54 +182,52 @@ rip_manager_start (RIP_MANAGER_INFO **rmip,
     \callergraph
 */
 void
-rip_manager_stop (RIP_MANAGER_INFO *rmi)
-{
+rip_manager_stop(RIP_MANAGER_INFO* rmi) {
     // Make sure this function isn't getting called twice
     if (!rmi || !g_atomic_int_compare_and_exchange(&rmi->stopped, FALSE, TRUE)) {
-	debug_printf ("rip_manager_stop() called while not started\n");
-	return;
+        debug_printf("rip_manager_stop() called while not started\n");
+        return;
     }
-    
+
     /* Write to pipe so ripping thread will exit select() */
 #if __UNIX__
-    debug_printf ("Writing to abort_pipe.\n");
-    write (rmi->abort_pipe[1], "0", 1);
+    debug_printf("Writing to abort_pipe.\n");
+    write(rmi->abort_pipe[1], "0", 1);
 #endif
 
     // Make sure the ripping started before we try to stop
-    debug_printf ("Waiting for m_started_sem...\n");
+    debug_printf("Waiting for m_started_sem...\n");
     threadlib_waitfor_sem(&rmi->started_sem);
     rmi->started = 0;
 
     // Causes the code running in the thread to bail
-    debug_printf ("Closing stream_sock...\n");
+    debug_printf("Closing stream_sock...\n");
     socklib_close(&rmi->stream_sock);
 
     // blocks until everything is ok and closed
-    debug_printf ("Waiting for hthread_ripper to close...\n");
+    debug_printf("Waiting for hthread_ripper to close...\n");
     threadlib_waitforclose(&rmi->hthread_ripper);
 #ifdef HAVE_OPENSSL
     socklib_free_tls(&rmi->stream_sock);
 #endif
-    debug_printf ("Destroying subsystems...\n");
-    destroy_subsystems (rmi);
-    debug_printf ("Destroying m_started_sem\n");
+    debug_printf("Destroying subsystems...\n");
+    destroy_subsystems(rmi);
+    debug_printf("Destroying m_started_sem\n");
     recording_locks_release(&rmi->recording_locks);
     threadlib_destroy_sem(&rmi->started_sem);
     parser_free(rmi);
-    debug_printf ("Done with rip_manager_stop\n");
+    debug_printf("Done with rip_manager_stop\n");
 
     /* Close pipes */
 #if __UNIX__
-    debug_printf ("Closing abort_pipe.\n");
-    close (rmi->abort_pipe[0]);
-    close (rmi->abort_pipe[1]);
+    debug_printf("Closing abort_pipe.\n");
+    close(rmi->abort_pipe[0]);
+    close(rmi->abort_pipe[1]);
 #endif
 }
 
 void
-rip_manager_cleanup (void)
-{
+rip_manager_cleanup(void) {
     socklib_cleanup();
 }
 
@@ -239,26 +236,24 @@ rip_manager_cleanup (void)
  * Private functions
  *****************************************************************************/
 static void
-debug_ripthread (RIP_MANAGER_INFO* rmi)
-{
-    debug_printf ("------ RIP_MANAGER_INFO -------\n");
-    debug_printf ("streamname = %s\n", rmi->streamname);
-    debug_printf ("server_name = %s\n", rmi->server_name);
-    debug_printf ("bitrate = %d\n", rmi->bitrate);
-    debug_printf ("meta_interval = %d\n", rmi->meta_interval);
-    debug_printf ("status = %d\n", rmi->status);
-    debug_printf ("track_count = %d\n", rmi->track_count);
-    debug_printf ("external_process = %p\n", rmi->ep);
+debug_ripthread(RIP_MANAGER_INFO* rmi) {
+    debug_printf("------ RIP_MANAGER_INFO -------\n");
+    debug_printf("streamname = %s\n", rmi->streamname);
+    debug_printf("server_name = %s\n", rmi->server_name);
+    debug_printf("bitrate = %d\n", rmi->bitrate);
+    debug_printf("meta_interval = %d\n", rmi->meta_interval);
+    debug_printf("status = %d\n", rmi->status);
+    debug_printf("track_count = %d\n", rmi->track_count);
+    debug_printf("external_process = %p\n", rmi->ep);
 }
 
 /** Main function launched by ripping thread.
-    This function loops, calling ripstream_rip(), and then posting 
+    This function loops, calling ripstream_rip(), and then posting
     status to caller and checks for abort conditions.
     \callgraph
     \callergraph
 */
-static BOOL retryable_error(error_code error)
-{
+static BOOL retryable_error(error_code error) {
     switch (error) {
     case SR_ERROR_CANT_RESOLVE_HOSTNAME:
     case SR_ERROR_CONNECT_FAILED:
@@ -277,44 +272,43 @@ static BOOL retryable_error(error_code error)
     }
 }
 
-static BOOL wait_for_retry(RIP_MANAGER_INFO *rmi, guint64 seconds)
-{
+static BOOL wait_for_retry(RIP_MANAGER_INFO* rmi, guint64 seconds) {
     /* Small waits let stop requests interrupt even a long Retry-After delay. */
     guint64 ticks = seconds > G_MAXUINT64 / 10 ? G_MAXUINT64 : seconds * 10;
     for (guint64 tick = 0; tick < ticks; tick++) {
-        if (g_atomic_int_get(&rmi->stopped)) return FALSE;
+        if (g_atomic_int_get(&rmi->stopped))
+            return FALSE;
         g_usleep(100000);
     }
     return !g_atomic_int_get(&rmi->stopped);
 }
 
 static void
-ripthread (void *thread_arg)
-{
+ripthread(void* thread_arg) {
     error_code ret;
-    RIP_MANAGER_INFO* rmi = (RIP_MANAGER_INFO*) thread_arg;
-    debug_ripthread (rmi);
-    debug_stream_prefs (rmi->prefs);
+    RIP_MANAGER_INFO* rmi = (RIP_MANAGER_INFO*)thread_arg;
+    debug_ripthread(rmi);
+    debug_stream_prefs(rmi->prefs);
 
     /* Connect to remote server */
-    ret = start_ripping (rmi);
+    ret = start_ripping(rmi);
     if (ret != SR_SUCCESS) {
-	debug_printf ("Ripthread did start_ripping()\n");
-	threadlib_signal_sem (&rmi->started_sem);
-	callback_post_error (rmi, ret);
-	goto DONE;
+        debug_printf("Ripthread did start_ripping()\n");
+        threadlib_signal_sem(&rmi->started_sem);
+        callback_post_error(rmi, ret);
+        goto DONE;
     }
 
-    rmi->status_callback (rmi, RM_STARTED, (void *)NULL);
-    callback_post_status (rmi, RM_STATUS_BUFFERING);
-    debug_printf ("Ripthread did initialization\n");
+    rmi->status_callback(rmi, RM_STARTED, (void*)NULL);
+    callback_post_status(rmi, RM_STATUS_BUFFERING);
+    debug_printf("Ripthread did initialization\n");
     threadlib_signal_sem(&rmi->started_sem);
 
     while (TRUE) {
         parser_poll_rules(rmi);
-	debug_printf ("Gonna ripstream_rip\n");
+        debug_printf("Gonna ripstream_rip\n");
         ret = ripstream_rip(rmi);
-	debug_printf ("Did ripstream_rip\n");
+        debug_printf("Did ripstream_rip\n");
 
         /* Preserve the last track status before cleanup prints file results.
            HLS retries retain the recording and do not interrupt its track. */
@@ -322,48 +316,51 @@ ripthread (void *thread_arg)
             rmi->started && rmi->status == RM_STATUS_RIPPING &&
             rmi->callback_filename[0] &&
             !(stream_capture_is_hls(rmi) && retryable_error(ret) &&
-              GET_AUTO_RECONNECT(rmi->prefs->flags))) {
+                GET_AUTO_RECONNECT(rmi->prefs->flags))) {
             rmi->callback_incomplete = TRUE;
             rmi->status_callback(rmi, RM_TRACK_INTERRUPTED, NULL);
         }
 
-	if (!rmi->started) {
-	    break;
-	}
-	else if (rmi->megabytes_ripped >= rmi->prefs->maxMB_rip_size 
-		 && GET_CHECK_MAX_BYTES (rmi->prefs->flags)) {
-	    /* GCS Aug 23, 2003: bytes_ripped can still overflow */
-	    socklib_close (&rmi->stream_sock);
-	    destroy_subsystems (rmi);
-	    //post_error (rmi, SR_ERROR_MAX_BYTES_RIPPED);
-	    break;
-	}
+        if (!rmi->started) {
+            break;
+        }
+        else if (rmi->megabytes_ripped >= rmi->prefs->maxMB_rip_size
+            && GET_CHECK_MAX_BYTES(rmi->prefs->flags)) {
+            /* GCS Aug 23, 2003: bytes_ripped can still overflow */
+            socklib_close(&rmi->stream_sock);
+            destroy_subsystems(rmi);
+            //post_error (rmi, SR_ERROR_MAX_BYTES_RIPPED);
+            break;
+        }
         else if (ret == SR_SUCCESS_END_OF_STREAM) {
             destroy_subsystems(rmi);
             break;
         }
-	else if (ret == SR_SUCCESS_BUFFERING) {
-	    callback_post_status (rmi, RM_STATUS_BUFFERING);
-	    /* Fall through */
-	}
-	else if (ret == SR_ERROR_CANT_DECODE_MP3) {
-	    callback_post_error (rmi, ret);
-	    continue;
-	}
-	else if (retryable_error(ret) && GET_AUTO_RECONNECT(rmi->prefs->flags)) {
+        else if (ret == SR_SUCCESS_BUFFERING) {
+            callback_post_status(rmi, RM_STATUS_BUFFERING);
+            /* Fall through */
+        }
+        else if (ret == SR_ERROR_CANT_DECODE_MP3) {
+            callback_post_error(rmi, ret);
+            continue;
+        }
+        else if (retryable_error(ret) && GET_AUTO_RECONNECT(rmi->prefs->flags)) {
             BOOL preserve_hls = stream_capture_is_hls(rmi);
-            if (!preserve_hls) destroy_subsystems(rmi);
+            if (!preserve_hls)
+                destroy_subsystems(rmi);
             while (rmi->started && !g_atomic_int_get(&rmi->stopped)) {
                 guint64 delay = MAX(G_GUINT64_CONSTANT(5), rmi->retry_after_seconds);
-                char *reason = g_strdup(errors_get_string(ret));
+                char* reason = g_strdup(errors_get_string(ret));
                 g_strdelimit(reason, "\r\n", ' ');
                 callback_post_status(rmi, RM_STATUS_RECONNECTING);
                 sr_console_printf(stderr, "\nConnection lost: %s. Retrying in %" G_GUINT64_FORMAT " s.\n",
                                   reason, delay);
                 g_free(reason);
-                if (!wait_for_retry(rmi, delay)) break;
+                if (!wait_for_retry(rmi, delay))
+                    break;
                 ret = preserve_hls ? SR_SUCCESS : start_ripping(rmi);
-                if (ret == SR_SUCCESS) break;
+                if (ret == SR_SUCCESS)
+                    break;
                 destroy_subsystems(rmi);
                 if (!retryable_error(ret)) {
                     callback_post_error(rmi, ret);
@@ -371,137 +368,137 @@ ripthread (void *thread_arg)
                     break;
                 }
             }
-	    if (!rmi->started || g_atomic_int_get(&rmi->stopped)) {
-		break;
-	    }
-	    /* Fall through */
-	}
-	else if (ret == SR_ERROR_ABORT_PIPE_SIGNALLED) {
-	    /* Normal exit condition CTRL-C on unix */
-	    destroy_subsystems (rmi);
-	    break;
-	}
-	else if (ret != SR_SUCCESS) {
-	    destroy_subsystems (rmi);
-	    callback_post_error (rmi, ret);
-	    break;
-	}
+            if (!rmi->started || g_atomic_int_get(&rmi->stopped)) {
+                break;
+            }
+            /* Fall through */
+        }
+        else if (ret == SR_ERROR_ABORT_PIPE_SIGNALLED) {
+            /* Normal exit condition CTRL-C on unix */
+            destroy_subsystems(rmi);
+            break;
+        }
+        else if (ret != SR_SUCCESS) {
+            destroy_subsystems(rmi);
+            callback_post_error(rmi, ret);
+            break;
+        }
 
-	/* All systems go.  Caller should update GUI that it is ripping */
-	if (rmi->callback_filesize > 0) {
-	    callback_post_status (rmi, RM_STATUS_RIPPING);
-	}
+        /* All systems go.  Caller should update GUI that it is ripping */
+        if (rmi->callback_filesize > 0) {
+            callback_post_status(rmi, RM_STATUS_RIPPING);
+        }
     }
 
     // We get here when there was either a fatal error
     // or we we're not auto-reconnecting and the stream just stopped
     // or when we have been told to stop, via the rmi->started flag
- DONE:
-    rmi->status_callback (rmi, RM_DONE, 0);
+DONE:
+    rmi->status_callback(rmi, RM_DONE, 0);
     rmi->started = 0;
-    debug_printf ("ripthread() exiting!\n");
+    debug_printf("ripthread() exiting!\n");
 }
 
 void
-destroy_subsystems (RIP_MANAGER_INFO* rmi)
-{
+destroy_subsystems(RIP_MANAGER_INFO* rmi) {
     socklib_close(&rmi->stream_sock);
 #ifdef HAVE_OPENSSL
     socklib_free_tls(&rmi->stream_sock);
 #endif
-    if (rmi->ep) close_external(&rmi->ep);
-    relaylib_stop (rmi);
-    /* GCS Feb 17,2008.  The socklib_cleanup() is done at program 
+    if (rmi->ep)
+        close_external(&rmi->ep);
+    relaylib_stop(rmi);
+    /* GCS Feb 17,2008.  The socklib_cleanup() is done at program
        shutdown, not rip_manager shutdown. */
     // socklib_cleanup();
     stream_capture_destroy(rmi);
-    filelib_shutdown (rmi);
+    filelib_shutdown(rmi);
     framed_audio_counter_free(&rmi->callback_audio_clock);
-    ripstream_destroy (rmi);
+    ripstream_destroy(rmi);
 }
 
 static int
-create_pls_file (RIP_MANAGER_INFO* rmi)
-{
-    FILE *fid;
+create_pls_file(RIP_MANAGER_INFO* rmi) {
+    FILE* fid;
 
-    if  ('\0' == rmi->prefs->relay_ip[0]) {
-	fprintf(stderr, "can not determine relaying ip, pass ip to -r \n");
-	return -1;
+    if ('\0' == rmi->prefs->relay_ip[0]) {
+        fprintf(stderr, "can not determine relaying ip, pass ip to -r \n");
+        return -1;
     }
 
-    fid = fopen (rmi->prefs->pls_file, "w");
+    fid = fopen(rmi->prefs->pls_file, "w");
 
     if (NULL == fid) {
-	fprintf(stderr, "could not create playlist file '%s': %d '%s'\n",
-		rmi->prefs->pls_file, errno, strerror(errno));
-    } else {
-	fprintf(fid, "[playlist]\n");
-	fprintf(fid, "NumberOfEntries=1\n");
-	fprintf(fid, "File1=http://%s:%d\n", rmi->prefs->relay_ip, 
-		rmi->prefs->relay_port);
-	fclose(fid);
+        fprintf(stderr, "could not create playlist file '%s': %d '%s'\n",
+                rmi->prefs->pls_file, errno, strerror(errno));
+    }
+    else {
+        fprintf(fid, "[playlist]\n");
+        fprintf(fid, "NumberOfEntries=1\n");
+        fprintf(fid, "File1=http://%s:%d\n", rmi->prefs->relay_ip,
+                rmi->prefs->relay_port);
+        fclose(fid);
     }
 
     return 0;
 }
 
 static error_code
-start_ripping (RIP_MANAGER_INFO* rmi)
-{
+start_ripping(RIP_MANAGER_INFO* rmi) {
     STREAM_PREFS* prefs = rmi->prefs;
     error_code ret;
 
     rmi->retry_after_seconds = 0;
     memset(&rmi->http_info, 0, sizeof(rmi->http_info));
-    const char *pproxy = prefs->proxyurl[0] ? prefs->proxyurl : NULL;
-    debug_printf ("start_ripping: checkpoint 1\n");
+    const char* pproxy = prefs->proxyurl[0] ? prefs->proxyurl : NULL;
+    debug_printf("start_ripping: checkpoint 1\n");
 
-    /* If proxy URL not spec'd on command line (or plugin field), 
+    /* If proxy URL not spec'd on command line (or plugin field),
        check the environment variable */
     if (!pproxy) {
-	char const *env_http_proxy = getenv ("http_proxy");
-	if (env_http_proxy && env_http_proxy[0] != '\0') {
-	    pproxy = env_http_proxy;
-	    debug_printf ("Getting proxy from $http_proxy: %s\n", pproxy);
-	}
+        char const* env_http_proxy = getenv("http_proxy");
+        if (env_http_proxy && env_http_proxy[0] != '\0') {
+            pproxy = env_http_proxy;
+            debug_printf("Getting proxy from $http_proxy: %s\n", pproxy);
+        }
     }
 
-    debug_printf ("start_ripping: checkpoint 2\n");
+    debug_printf("start_ripping: checkpoint 2\n");
 
     /* Connect to the stream */
-    ret = http_sc_connect (rmi, &rmi->stream_sock, prefs->url, 
-			   pproxy, &rmi->http_info, 
-			   prefs->useragent, prefs->if_name);
+    ret = http_sc_connect(rmi, &rmi->stream_sock, prefs->url,
+                          pproxy, &rmi->http_info,
+                          prefs->useragent, prefs->if_name);
     if (ret != SR_SUCCESS) {
-	debug_printf ("http_sc_connect() returned error\n");
-	goto RETURN_ERR;
+        debug_printf("http_sc_connect() returned error\n");
+        goto RETURN_ERR;
     }
     rmi->flac_in_ogg = FALSE;
     ret = stream_capture_prepare(rmi);
-    if (ret != SR_SUCCESS) goto RETURN_ERR;
+    if (ret != SR_SUCCESS)
+        goto RETURN_ERR;
     if (rmi->capture && GET_MAKE_RELAY(prefs->flags) && !rmi->relay_skip_warned) {
         sr_console_printf(stderr, "Warning: relay is unavailable for %s; recording will continue without a relay.\n",
                           stream_capture_is_hls(rmi) ? "HLS" : "FLAC");
         rmi->relay_skip_warned = TRUE;
     }
 
-    /* If the icy_name exists, but is empty, set to a bogus name so 
+    /* If the icy_name exists, but is empty, set to a bogus name so
        that we can create the directory correctly, etc. */
     if (strlen(rmi->http_info.icy_name) == 0) {
-	rmi->http_info.have_icy_name = FALSE;
-	strcpy (rmi->http_info.icy_name, "Unknown station");
+        rmi->http_info.have_icy_name = FALSE;
+        strcpy(rmi->http_info.icy_name, "Unknown station");
     }
 
-    /* Set the ripinfo struct from the data we now know about the 
-     * stream, this info are things like server name, type, 
+    /* Set the ripinfo struct from the data we now know about the
+     * stream, this info are things like server name, type,
      * bitrate etc.. */
     rmi->meta_interval = rmi->http_info.meta_interval;
     rmi->http_bitrate = rmi->http_info.icy_bitrate;
     rmi->detected_bitrate = -1;
     rmi->bitrate = -1;
-    g_strlcpy (rmi->streamname, rmi->http_info.icy_name, sizeof(rmi->streamname));
-    g_strlcpy (rmi->server_name, rmi->http_info.server, sizeof(rmi->server_name));
+    g_strlcpy(rmi->streamname, rmi->http_info.icy_name, sizeof(rmi->streamname));
+    g_strlcpy(rmi->server_name, rmi->http_info.server, sizeof(rmi->server_name));
 
     /* Initialize file writing code. */
     if (prefs->wav && rmi->http_info.content_type != CONTENT_TYPE_MP3) {
@@ -510,34 +507,35 @@ start_ripping (RIP_MANAGER_INFO* rmi)
         goto RETURN_ERR;
     }
     ret = filelib_init
-	    (rmi, 
-	     GET_INDIVIDUAL_TRACKS(rmi->prefs->flags),
-	     GET_COUNT_FILES(rmi->prefs->flags),
-	     rmi->prefs->count_start,
-	     GET_KEEP_INCOMPLETE(rmi->prefs->flags),
-	     GET_SINGLE_FILE_OUTPUT(rmi->prefs->flags),
-	     stream_capture_file_type(rmi),
-	     rmi->prefs->output_directory,
-	     rmi->prefs->output_pattern,
-	     rmi->prefs->showfile_pattern,
-	     GET_SEPARATE_DIRS(rmi->prefs->flags),
-	     GET_DATE_STAMP(rmi->prefs->flags),
-	     rmi->http_info.icy_name);
+        (rmi,
+         GET_INDIVIDUAL_TRACKS(rmi->prefs->flags),
+         GET_COUNT_FILES(rmi->prefs->flags),
+         rmi->prefs->count_start,
+         GET_KEEP_INCOMPLETE(rmi->prefs->flags),
+         GET_SINGLE_FILE_OUTPUT(rmi->prefs->flags),
+         stream_capture_file_type(rmi),
+         rmi->prefs->output_directory,
+         rmi->prefs->output_pattern,
+         rmi->prefs->showfile_pattern,
+         GET_SEPARATE_DIRS(rmi->prefs->flags),
+         GET_DATE_STAMP(rmi->prefs->flags),
+         rmi->http_info.icy_name);
     if (ret != SR_SUCCESS) {
-	debug_printf ("filelib_init() returned error\n");
-	goto RETURN_ERR;
+        debug_printf("filelib_init() returned error\n");
+        goto RETURN_ERR;
     }
 
     /* Start up external program to get metadata. */
     rmi->ep = 0;
     if (GET_EXTERNAL_CMD(rmi->prefs->flags)) {
-	debug_printf ("Spawn external: %s\n", rmi->prefs->ext_cmd);
-	rmi->ep = spawn_external (rmi->prefs->ext_cmd);
-	if (rmi->ep) {
-	    debug_printf ("Spawn external succeeded\n");
-	} else {
-	    debug_printf ("Spawn external failed\n");
-	}
+        debug_printf("Spawn external: %s\n", rmi->prefs->ext_cmd);
+        rmi->ep = spawn_external(rmi->prefs->ext_cmd);
+        if (rmi->ep) {
+            debug_printf("Spawn external succeeded\n");
+        }
+        else {
+            debug_printf("Spawn external failed\n");
+        }
     }
 
     /* Allocate buffers for ripstream */
@@ -545,66 +543,63 @@ start_ripping (RIP_MANAGER_INFO* rmi)
     rmi->getbuffer = 0;
     ret = ripstream_init(rmi);
     if (ret != SR_SUCCESS) {
-	ripstream_destroy (rmi);
-	goto RETURN_ERR;
+        ripstream_destroy(rmi);
+        goto RETURN_ERR;
     }
 
     /* Launch relay server threads */
-    debug_printf ("start_ripping: checkpoint 3\n");
+    debug_printf("start_ripping: checkpoint 3\n");
     if (GET_MAKE_RELAY(rmi->prefs->flags) && !rmi->capture) {
-	u_short new_port = 0;
-	ret = relaylib_start (rmi, 
-			      GET_SEARCH_PORTS(rmi->prefs->flags), 
-			      rmi->prefs->relay_port,
-			      rmi->prefs->max_port, 
-			      &new_port,
-			      rmi->prefs->if_name, 
-			      rmi->prefs->max_connections,
-			      rmi->prefs->relay_ip,
-			      rmi->http_info.meta_interval != NO_META_INTERVAL);
-	if (ret != SR_SUCCESS) {
-	    goto RETURN_ERR;
-	}
+        u_short new_port = 0;
+        ret = relaylib_start(rmi,
+                             GET_SEARCH_PORTS(rmi->prefs->flags),
+                             rmi->prefs->relay_port,
+                             rmi->prefs->max_port,
+                             &new_port,
+                             rmi->prefs->if_name,
+                             rmi->prefs->max_connections,
+                             rmi->prefs->relay_ip,
+                             rmi->http_info.meta_interval != NO_META_INTERVAL);
+        if (ret != SR_SUCCESS) {
+            goto RETURN_ERR;
+        }
 
-	rmi->prefs->relay_port = new_port;
+        rmi->prefs->relay_port = new_port;
 
-	/* Create pls file with address of relay stream */
-	if (0 != rmi->prefs->pls_file[0]) {
-	    create_pls_file (rmi);
-	}
+        /* Create pls file with address of relay stream */
+        if (0 != rmi->prefs->pls_file[0]) {
+            create_pls_file(rmi);
+        }
     }
 
     /* Done. */
-    debug_printf ("start_ripping: checkpoint 4\n");
-    callback_post_status (rmi, RM_STATUS_BUFFERING);
+    debug_printf("start_ripping: checkpoint 4\n");
+    callback_post_status(rmi, RM_STATUS_BUFFERING);
     return SR_SUCCESS;
 
- RETURN_ERR:
+RETURN_ERR:
     socklib_close(&rmi->stream_sock);
-    return ret;	
+    return ret;
 }
 
 /* Winamp plugin needs to get content type */
 int
-rip_manager_get_content_type (RIP_MANAGER_INFO* rmi)
-{
+rip_manager_get_content_type(RIP_MANAGER_INFO* rmi) {
     return rmi->http_info.content_type;
 }
 
 enum OverwriteOpt
-string_to_overwrite_opt (char* str)
-{
+string_to_overwrite_opt(char* str) {
     int i;
     for (i = 0; i < 5; i++) {
-	if (strcmp(str, overwrite_opt_strings[i]) == 0) {
-	    return i;
-	}
+        if (strcmp(str, overwrite_opt_strings[i]) == 0) {
+            return i;
+        }
     }
     return OVERWRITE_UNKNOWN;
 }
 
 const char*
-overwrite_opt_to_string (enum OverwriteOpt oo)
-{
-    return overwrite_opt_strings[(int) oo];
+overwrite_opt_to_string(enum OverwriteOpt oo) {
+    return overwrite_opt_strings[(int)oo];
 }

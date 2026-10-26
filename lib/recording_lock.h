@@ -4,7 +4,7 @@
 
 #include <glib.h>
 
-gboolean recording_lock_acquire(GList **locks, const char *incomplete_directory);
-void recording_locks_release(GList **locks);
+gboolean recording_lock_acquire(GList** locks, const char* incomplete_directory);
+void recording_locks_release(GList** locks);
 
 #endif

@@ -35,7 +35,7 @@
 //
 
 // File Routines
-////////////////////////////////////////// 
+//////////////////////////////////////////
 
 #ifdef WIN32
 
@@ -64,7 +64,7 @@
 // #define DeleteFile(_file_)  	(!unlink(_file_))
 #define INVALID_FHANDLE 	-1
 
-#endif 
+#endif
 
 // Thread Routines
 #if WIN32
@@ -106,7 +106,7 @@
 #endif
 
 // Socket Routines
-////////////////////////////////////////// 
+//////////////////////////////////////////
 
 #if WIN32
 //#define EAGAIN          WSAEWOULDBLOCK
@@ -120,7 +120,7 @@
 #endif
 
 // Other stuff
-////////////////////////////////////////// 
+//////////////////////////////////////////
 
 #if WIN32
 #ifndef SR_MODERN_WINDOWS

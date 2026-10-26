@@ -11,8 +11,7 @@
 
 static guint64 console_write_generation;
 
-static int console_columns(FILE *stream)
-{
+static int console_columns(FILE* stream) {
 #ifdef WIN32
     HANDLE handle = (HANDLE)(intptr_t)_get_osfhandle(_fileno(stream));
     CONSOLE_SCREEN_BUFFER_INFO info;
@@ -27,18 +26,19 @@ static int console_columns(FILE *stream)
 }
 
 /* Count display columns rather than bytes; combining marks occupy no column. */
-static char *fit_columns(const char *text, int budget, int *columns)
-{
-    char *valid = g_utf8_make_valid(text, -1);
-    GString *result = g_string_new(NULL);
-    const char *p;
+static char* fit_columns(const char* text, int budget, int* columns) {
+    char* valid = g_utf8_make_valid(text, -1);
+    GString* result = g_string_new(NULL);
+    const char* p;
     *columns = 0;
     for (p = valid; *p; p = g_utf8_next_char(p)) {
         gunichar c = g_utf8_get_char(p);
         int width;
-        if (g_unichar_iscntrl(c)) c = ' ';
+        if (g_unichar_iscntrl(c))
+            c = ' ';
         width = g_unichar_iszerowidth(c) ? 0 : g_unichar_iswide(c) ? 2 : 1;
-        if (budget >= 0 && *columns + width > budget) break;
+        if (budget >= 0 && *columns + width > budget)
+            break;
         g_string_append_unichar(result, c);
         *columns += width;
     }
@@ -46,18 +46,17 @@ static char *fit_columns(const char *text, int budget, int *columns)
     return g_string_free(result, FALSE);
 }
 
-void sr_console_status(FILE *stream, const char *status, const char *title, const char *detail)
-{
-    static char *previous_line;
-    static FILE *previous_stream;
+void sr_console_status(FILE* stream, const char* status, const char* title, const char* detail) {
+    static char* previous_line;
+    static FILE* previous_stream;
     static int previous_columns;
     static guint64 previous_generation;
     int columns = console_columns(stream), used;
-    char *suffix = detail ? g_strdup_printf(" [%8s]", detail) : g_strdup("");
+    char* suffix = detail ? g_strdup_printf(" [%8s]", detail) : g_strdup("");
     /* Pipes and files have no display width limit. */
     int budget = columns ? MAX(0, columns - 1 - 16 - (int)strlen(suffix)) : -1;
-    char *name = fit_columns(title, budget, &used);
-    char *line = g_strdup_printf("[%-13s] %s%s", status, name, suffix);
+    char* name = fit_columns(title, budget, &used);
+    char* line = g_strdup_printf("[%-13s] %s%s", status, name, suffix);
     /* Data callbacks can repeat within the same displayed second. */
     if (previous_stream == stream && previous_columns == columns &&
         previous_generation == console_write_generation &&
@@ -68,7 +67,7 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
         return;
     }
     if (columns) {
-        char *fitted = fit_columns(line, columns - 1, &used);
+        char* fitted = fit_columns(line, columns - 1, &used);
         /* Erase through the last column without triggering automatic wrapping. */
 #ifdef WIN32
         HANDLE handle = (HANDLE)(intptr_t)_get_osfhandle(_fileno(stream));
@@ -85,7 +84,8 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
         sr_console_printf(stream, "\r%s\033[K\r", fitted);
 #endif
         g_free(fitted);
-    } else {
+    }
+    else {
         sr_console_printf(stream, "%s\r", line);
     }
     g_free(previous_line);
@@ -99,23 +99,22 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
 
 /* Keep UTF-8 in pipes and files; bypass CRT code-page conversion on Windows consoles. */
 int
-sr_console_vprintf(FILE *stream, const char *format, va_list args)
-{
+sr_console_vprintf(FILE* stream, const char* format, va_list args) {
     /* A message or track separator requires the next status to be redrawn. */
     console_write_generation++;
-    char *text = g_strdup_vprintf(format, args);
+    char* text = g_strdup_vprintf(format, args);
     size_t length = strlen(text);
     int result = -1;
 #ifdef WIN32
     HANDLE handle = (HANDLE)(intptr_t)_get_osfhandle(_fileno(stream));
     DWORD mode;
     if (handle != INVALID_HANDLE_VALUE && GetConsoleMode(handle, &mode)) {
-        char *valid = g_utf8_make_valid(text, -1);
-        GString *lines = g_string_new(NULL);
-        gunichar2 *wide;
+        char* valid = g_utf8_make_valid(text, -1);
+        GString* lines = g_string_new(NULL);
+        gunichar2* wide;
         glong count;
         glong offset = 0;
-        const char *cursor;
+        const char* cursor;
         /* Console writes do not perform the CRT's LF-to-CRLF translation. */
         for (cursor = valid; *cursor; cursor++) {
             if (*cursor == '\n' && (cursor == valid || cursor[-1] != '\r'))
@@ -138,7 +137,8 @@ sr_console_vprintf(FILE *stream, const char *format, va_list args)
         g_free(wide);
         g_string_free(lines, TRUE);
         g_free(valid);
-    } else
+    }
+    else
 #endif
     {
         if (fwrite(text, 1, length, stream) == length && fflush(stream) == 0)
@@ -149,8 +149,7 @@ sr_console_vprintf(FILE *stream, const char *format, va_list args)
 }
 
 int
-sr_console_printf(FILE *stream, const char *format, ...)
-{
+sr_console_printf(FILE* stream, const char* format, ...) {
     int result;
     va_list args;
     va_start(args, format);

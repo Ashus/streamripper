@@ -20,6 +20,6 @@
 #include "srtypes.h"
 
 error_code
-ripstream_mp3_rip (RIP_MANAGER_INFO* rmi);
+ripstream_mp3_rip(RIP_MANAGER_INFO* rmi);
 
 #endif

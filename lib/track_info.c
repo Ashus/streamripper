@@ -41,19 +41,17 @@
  * Public functions
  *****************************************************************************/
 BOOL
-track_info_different (TRACK_INFO *t1, TRACK_INFO *t2)
-{
-    /* We test the parsed fields instead of raw_metadata because the 
-       parse rules may have stripped garbage out, causing the resulting 
+track_info_different(TRACK_INFO* t1, TRACK_INFO* t2) {
+    /* We test the parsed fields instead of raw_metadata because the
+       parse rules may have stripped garbage out, causing the resulting
        track info to be the same. */
     if (!strcmp(t1->artist, t2->artist)
-	&& t1->save_track == t2->save_track
-	&& !strcmp(t1->title, t2->title)
-	&& !strcmp(t1->album, t2->album)
-	&& !strcmp(t1->track_p, t2->track_p)
-	&& !strcmp(t1->year, t2->year))
-    {
-	return 0;
+        && t1->save_track == t2->save_track
+        && !strcmp(t1->title, t2->title)
+        && !strcmp(t1->album, t2->album)
+        && !strcmp(t1->track_p, t2->track_p)
+        && !strcmp(t1->year, t2->year)) {
+        return 0;
     }
 
     /* Otherwise, there was a change. */
@@ -61,33 +59,31 @@ track_info_different (TRACK_INFO *t1, TRACK_INFO *t2)
 }
 
 void
-track_info_debug (TRACK_INFO* ti, char* tag)
-{
-    debug_mprintf (m_("----- TRACK_INFO ") m_s m_("\n")
-		   m_("HAVETI: %d\n")
-		   m_("RAW_MD: ") m_s m_("\n")
-		   m_("ARTIST: ") m_S m_("\n")
-		   m_("TITLE:  ") m_S m_("\n")
-		   m_("ALBUM:  ") m_S m_("\n")
-		   m_("TRACK_P:") m_S m_("\n")
-		   m_("TRACK_A:") m_S m_("\n")
-		   m_("YEAR:  ") m_S m_("\n")
-		   m_("SAVE:   %d\n"),
-		   tag,
-		   ti->have_track_info,
-		   ti->raw_metadata,
-		   ti->artist,
-		   ti->title,
-		   ti->album,
-                   ti->track_p,
-                   ti->track_a,
-                   ti->year,
-		   ti->save_track);
+track_info_debug(TRACK_INFO* ti, char* tag) {
+    debug_mprintf(m_("----- TRACK_INFO ") m_s m_("\n")
+                  m_("HAVETI: %d\n")
+                  m_("RAW_MD: ") m_s m_("\n")
+                  m_("ARTIST: ") m_S m_("\n")
+                  m_("TITLE:  ") m_S m_("\n")
+                  m_("ALBUM:  ") m_S m_("\n")
+                  m_("TRACK_P:") m_S m_("\n")
+                  m_("TRACK_A:") m_S m_("\n")
+                  m_("YEAR:  ") m_S m_("\n")
+                  m_("SAVE:   %d\n"),
+                  tag,
+                  ti->have_track_info,
+                  ti->raw_metadata,
+                  ti->artist,
+                  ti->title,
+                  ti->album,
+                  ti->track_p,
+                  ti->track_a,
+                  ti->year,
+                  ti->save_track);
 }
 
 void
-track_info_clear (TRACK_INFO* ti)
-{
+track_info_clear(TRACK_INFO* ti) {
     ti->have_track_info = 0;
     ti->raw_metadata[0] = 0;
     ti->artist[0] = 0;
@@ -101,16 +97,15 @@ track_info_clear (TRACK_INFO* ti)
 }
 
 void
-track_info_copy (TRACK_INFO* dest, TRACK_INFO* src)
-{
+track_info_copy(TRACK_INFO* dest, TRACK_INFO* src) {
     dest->have_track_info = src->have_track_info;
-    strcpy (dest->raw_metadata, src->raw_metadata);
-    mstrcpy (dest->artist, src->artist);
-    mstrcpy (dest->title, src->title);
-    mstrcpy (dest->album, src->album);
-    mstrcpy (dest->track_p, src->track_p);
-    mstrcpy (dest->track_a, src->track_a);
-    mstrcpy (dest->year, src->year);
-    strcpy (dest->composed_metadata, src->composed_metadata);
+    strcpy(dest->raw_metadata, src->raw_metadata);
+    mstrcpy(dest->artist, src->artist);
+    mstrcpy(dest->title, src->title);
+    mstrcpy(dest->album, src->album);
+    mstrcpy(dest->track_p, src->track_p);
+    mstrcpy(dest->track_a, src->track_a);
+    mstrcpy(dest->year, src->year);
+    strcpy(dest->composed_metadata, src->composed_metadata);
     dest->save_track = src->save_track;
 }

@@ -35,15 +35,14 @@
  *****************************************************************************/
 #ifdef WIN32
 struct thread_start {
-    void (*callback)(void *);
-    void *arg;
+    void (*callback)(void*);
+    void* arg;
 };
 
-static unsigned __stdcall thread_entry(void *data)
-{
-    struct thread_start *start = data;
-    void (*callback)(void *) = start->callback;
-    void *arg = start->arg;
+static unsigned __stdcall thread_entry(void* data) {
+    struct thread_start* start = data;
+    void (*callback)(void*) = start->callback;
+    void* arg = start->arg;
     free(start);
     callback(arg);
     return 0;
@@ -51,12 +50,12 @@ static unsigned __stdcall thread_entry(void *data)
 #endif
 
 error_code
-threadlib_beginthread (THREAD_HANDLE *thread, void (*callback)(void *), 
-		       void* arg)
-{
+threadlib_beginthread(THREAD_HANDLE* thread, void (*callback)(void*),
+                      void* arg) {
 #ifdef WIN32
-    struct thread_start *start = malloc(sizeof(*start));
-    if (!start) return SR_ERROR_CANT_ALLOC_MEMORY;
+    struct thread_start* start = malloc(sizeof(*start));
+    if (!start)
+        return SR_ERROR_CANT_ALLOC_MEMORY;
     start->callback = callback;
     start->arg = arg;
     *thread = (HANDLE)_beginthreadex(NULL, 0, thread_entry, start, 0, NULL);
@@ -65,7 +64,7 @@ threadlib_beginthread (THREAD_HANDLE *thread, void (*callback)(void *),
         return SR_ERROR_CANT_CREATE_THREAD;
     }
 #else
-    if (BeginThread (*thread, callback, arg)) return SR_ERROR_CANT_CREATE_THREAD;
+    if (BeginThread(*thread, callback, arg)) return SR_ERROR_CANT_CREATE_THREAD;
 #endif
     //if (thread->thread_handle == NULL)	// don't feel like porting this
     //	return SR_ERROR_CANT_CREATE_THREAD;
@@ -74,9 +73,8 @@ threadlib_beginthread (THREAD_HANDLE *thread, void (*callback)(void *),
 }
 
 void
-threadlib_waitforclose (THREAD_HANDLE *thread)
-{
-    WaitForThread (*thread);
+threadlib_waitforclose(THREAD_HANDLE* thread) {
+    WaitForThread(*thread);
 #ifdef WIN32
     CloseHandle(*thread);
     *thread = NULL;
@@ -84,33 +82,29 @@ threadlib_waitforclose (THREAD_HANDLE *thread)
 }
 
 HSEM
-threadlib_create_sem ()
-{
+threadlib_create_sem() {
     HSEM s;
-    SemInit (s);
+    SemInit(s);
     return s;
 }
 
 error_code
-threadlib_waitfor_sem (HSEM *e)
-{
+threadlib_waitfor_sem(HSEM* e) {
     if (!e)
-	return SR_ERROR_INVALID_PARAM;
-    SemWait (*e);
+        return SR_ERROR_INVALID_PARAM;
+    SemWait(*e);
     return SR_SUCCESS;
 }
 
 error_code
-threadlib_signal_sem(HSEM *e)
-{
+threadlib_signal_sem(HSEM* e) {
     if (!e)
-	return SR_ERROR_INVALID_PARAM;
-    SemPost (*e);
+        return SR_ERROR_INVALID_PARAM;
+    SemPost(*e);
     return SR_SUCCESS;
 }
 
 void
-threadlib_destroy_sem (HSEM *e)
-{
-    SemDestroy (*e);
+threadlib_destroy_sem(HSEM* e) {
+    SemDestroy(*e);
 }

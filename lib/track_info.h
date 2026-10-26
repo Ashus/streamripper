@@ -20,12 +20,12 @@
 #include "srtypes.h"
 
 BOOL
-track_info_different (TRACK_INFO *t1, TRACK_INFO *t2);
+track_info_different(TRACK_INFO* t1, TRACK_INFO* t2);
 void
-track_info_debug (TRACK_INFO* ti, char* tag);
+track_info_debug(TRACK_INFO* ti, char* tag);
 void
-track_info_clear (TRACK_INFO* ti);
+track_info_clear(TRACK_INFO* ti);
 void
-track_info_copy (TRACK_INFO* dest, TRACK_INFO* src);
+track_info_copy(TRACK_INFO* dest, TRACK_INFO* src);
 
 #endif

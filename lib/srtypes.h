@@ -21,7 +21,7 @@
 #include "sr_config.h"
 #include "sr_compat.h"
 #include "file_preallocation.h"
-#include "list.h"
+#include "../third_party/linux/list.h"
 #if WIN32
 /* Warning: Not allowed to mix windows.h & cdk.h */
 #include <windows.h>
@@ -98,9 +98,9 @@ typedef unsigned int uint32_t;
 #define DEFAULT_META_INTERVAL	1024
 
 #ifdef WIN32
-  #ifndef _WINSOCKAPI_
-    #define __DEFINE_TYPES__
-  #endif
+#ifndef _WINSOCKAPI_
+#define __DEFINE_TYPES__
+#endif
 #endif
 
 #ifdef __DEFINE_TYPES__
@@ -124,24 +124,23 @@ typedef int error_code;
 #define CONTENT_TYPE_FLAC             8
 #define CONTENT_TYPE_HLS              9
 
-/* 
- * IO_DATA_INPUT is a interface for socket input data, it has one 
- * method 'get_data' and is called by a "ripper" which is effectivly 
+/*
+ * IO_DATA_INPUT is a interface for socket input data, it has one
+ * method 'get_data' and is called by a "ripper" which is effectivly
  * only ripshout.c (and the R.I.P. riplive365.c)
  */
-typedef struct IO_DATA_INPUTst{
-	int (*get_input_data)(char* buffer, int size);
+typedef struct IO_DATA_INPUTst {
+    int (*get_input_data)(char* buffer, int size);
 } IO_DATA_INPUT;
 
 #define NO_TRACK_STR	"No track info..."
 
-/* 
- * SPLITPOINT_OPTIONS are the options used to tweek how the silence 
+/*
+ * SPLITPOINT_OPTIONS are the options used to tweek how the silence
  * separation is done.
  */
-typedef struct SPLITPOINT_OPTIONSst
-{
-    int	xs;
+typedef struct SPLITPOINT_OPTIONSst {
+    int xs;
     int xs_min_volume;
     int xs_silence_length;
     int xs_search_window_1;
@@ -151,12 +150,11 @@ typedef struct SPLITPOINT_OPTIONSst
     int xs_padding_2;
 } SPLITPOINT_OPTIONS;
 
-/* 
+/*
  * CODESET_OPTIONS are the options used to decide how to parse
  * and convert the metadata
  */
-typedef struct CODESET_OPTIONSst
-{
+typedef struct CODESET_OPTIONSst {
     char codeset_locale[MAX_CODESET_STRING];
     char codeset_filesys[MAX_CODESET_STRING];
     char codeset_id3[MAX_CODESET_STRING];
@@ -164,7 +162,7 @@ typedef struct CODESET_OPTIONSst
     char codeset_relay[MAX_CODESET_STRING];
 } CODESET_OPTIONS;
 
-/* 
+/*
  * Various CODESET types
  */
 #define CODESET_UTF8          1
@@ -179,12 +177,13 @@ struct lstring {
     gsize num_bytes;
     gchar* data;
 };
+
 typedef struct lstring Lstring;
 
 /* The mchar is a legacy data structure, and should be removed */
 typedef gchar mchar;
 
-/* 
+/*
  * Parse_Rule is a single line of the parse rules file
  */
 struct parse_rule {
@@ -203,23 +202,23 @@ struct parse_rule {
     mchar* match;
     mchar* subst;
 };
+
 typedef struct parse_rule Parse_Rule;
 
-/* 
+/*
  * TRACK_INFO is the parsed metadata
  */
-typedef struct TRACK_INFOst
-{
+typedef struct TRACK_INFOst {
     int have_track_info;
     char raw_metadata[MAX_TRACK_LEN];
     mchar w_raw_metadata[MAX_TRACK_LEN];
     mchar artist[MAX_TRACK_LEN];
     mchar title[MAX_TRACK_LEN];
     mchar album[MAX_TRACK_LEN];
-    mchar track_p[MAX_TRACK_LEN];                /* Track# parsed */
-    mchar track_a[MAX_TRACK_LEN];                /* Track# assigned to id3 */
+    mchar track_p[MAX_TRACK_LEN]; /* Track# parsed */
+    mchar track_a[MAX_TRACK_LEN]; /* Track# assigned to id3 */
     mchar year[MAX_TRACK_LEN];
-    char composed_metadata[MAX_METADATA_LEN+1];  /* For relay stream */
+    char composed_metadata[MAX_METADATA_LEN + 1]; /* For relay stream */
     BOOL save_track;
 } TRACK_INFO;
 
@@ -227,38 +226,36 @@ typedef struct TRACK_INFOst
 typedef int SOCKET;
 #endif
 
-typedef struct HSOCKETst
-{
-	SOCKET	s;
-	BOOL	closed;
-        BOOL chunked;
-        BOOL chunk_done;
-        BOOL chunk_crlf;
-        guint64 chunk_remaining;
-        unsigned char prefetched[64];
-        unsigned int prefetched_size;
+typedef struct HSOCKETst {
+    SOCKET s;
+    BOOL closed;
+    BOOL chunked;
+    BOOL chunk_done;
+    BOOL chunk_crlf;
+    guint64 chunk_remaining;
+    unsigned char prefetched[64];
+    unsigned int prefetched_size;
 #ifdef HAVE_OPENSSL
-        void *tls;
-        void *proxy_tls;             /* Outer TLS retained beneath a CONNECT tunnel */
-        BOOL tls_info_printed;
-        BOOL proxy_tls_info_printed;
+    void* tls;
+    void* proxy_tls; /* Outer TLS retained beneath a CONNECT tunnel */
+    BOOL tls_info_printed;
+    BOOL proxy_tls_info_printed;
 #endif
 } HSOCKET;
 
-/* 
+/*
  * OverwriteOpt controls how files in complete directory are overwritten
  */
 enum OverwriteOpt {
-    OVERWRITE_UNKNOWN,	// Error case
-    OVERWRITE_ALWAYS,	// Always replace file in complete with newer
-    OVERWRITE_NEVER,	// Never replace file in complete with newer
-    OVERWRITE_LARGER,	// Replace file in complete if newer is larger
-    OVERWRITE_VERSION	// Never overwrite, instead make a new version
+    OVERWRITE_UNKNOWN, // Error case
+    OVERWRITE_ALWAYS, // Always replace file in complete with newer
+    OVERWRITE_NEVER, // Never replace file in complete with newer
+    OVERWRITE_LARGER, // Replace file in complete if newer is larger
+    OVERWRITE_VERSION // Never overwrite, instead make a new version
 };
 
 /* Information extracted from the stream's HTTP header */
-typedef struct SR_HTTP_HEADERst
-{
+typedef struct SR_HTTP_HEADERst {
     int content_type;
     int meta_interval;
     gint64 content_length;
@@ -274,8 +271,7 @@ typedef struct SR_HTTP_HEADERst
     char server[MAX_SERVER_LEN];
 } SR_HTTP_HEADER;
 
-typedef struct URLINFOst
-{
+typedef struct URLINFOst {
     char host[MAX_HOST_LEN];
     char path[MAX_URL_LEN];
     u_short port;
@@ -284,14 +280,14 @@ typedef struct URLINFOst
 } URLINFO;
 
 typedef struct external_process External_Process;
-struct external_process
-{
+
+struct external_process {
 #if defined (WIN32)
-    HANDLE mypipe;   /* read from child stdout */
+    HANDLE mypipe; /* read from child stdout */
     HANDLE hproc;
     DWORD pid;
 #else
-    int mypipe[2];   /* 0 is for parent reading, 1 is for parent writing */
+    int mypipe[2]; /* 0 is for parent reading, 1 is for parent writing */
     pid_t pid;
 #endif
     int line_buf_idx;
@@ -303,12 +299,12 @@ struct external_process
 };
 
 typedef struct metadata Metadata;
-struct metadata
-{
+
+struct metadata {
     /* m_composed_metadata includes 1 byte for size*16 */
-    char    m_composed_metadata[MAX_METADATA_LEN+1];
+    char m_composed_metadata[MAX_METADATA_LEN + 1];
     /* m_node is pointer to chunk associated with metadata */
-    GList   *m_node;
+    GList* m_node;
 };
 
 
@@ -319,108 +315,109 @@ struct metadata
 
 /* Each ogg page boundary within the cbuf gets this struct */
 typedef struct OGG_PAGE_LIST_struct OGG_PAGE_LIST;
-struct OGG_PAGE_LIST_struct
-{
+
+struct OGG_PAGE_LIST_struct {
     unsigned long m_page_start;
     unsigned long m_page_len;
     unsigned long m_page_flags;
-    char *m_header_buf_ptr;
+    char* m_header_buf_ptr;
     unsigned long m_header_buf_len;
     LIST m_list;
 };
 
 typedef struct cbuf3 Cbuf3;
+
 struct cbuf3 {
-    HSEM        sem;
+    HSEM sem;
 
-    GQueue      *buf;             /**< Filled portion of buffer */
-    GQueue      *free_list;       /**< Free chunks */
-    char        *pending;         /**< Filled, but not yet ready for relay */
+    GQueue* buf; /**< Filled portion of buffer */
+    GQueue* free_list; /**< Free chunks */
+    char* pending; /**< Filled, but not yet ready for relay */
 
-    u_long      num_chunks;
-    u_long	chunk_size;
-    int         have_relay;
+    u_long num_chunks;
+    u_long chunk_size;
+    int have_relay;
 
-    int         content_type;
+    int content_type;
 
     /* This should be moved out of cbuf */
-    GQueue      *write_list;      /**< List of writers with tracks to write */
+    GQueue* write_list; /**< List of writers with tracks to write */
 
     /* Ogg stuff */
-    GQueue      *ogg_page_refs;   /**< List of pointers to ogg pages */
-    GList       *written_page;    /**< Most recently written page */
+    GQueue* ogg_page_refs; /**< List of pointers to ogg pages */
+    GList* written_page; /**< Most recently written page */
 
     /* MP3/AAC/NSV stuff */
-    GQueue      *metadata_list;   /**< List of all metadata */
+    GQueue* metadata_list; /**< List of all metadata */
 };
 
 typedef struct cbuf3_pointer Cbuf3_pointer;
-struct cbuf3_pointer
-{
-    GList      *node;
-    u_long      offset;
+
+struct cbuf3_pointer {
+    GList* node;
+    u_long offset;
 };
 
-/* The location of the beginning of each ogg page within the cbuf 
+/* The location of the beginning of each ogg page within the cbuf
    is stored in an list of Ogg_page_references.  */
 typedef struct ogg_page_reference Ogg_page_reference;
-struct ogg_page_reference
-{
-    Cbuf3_pointer    m_cbuf3_loc;
-    unsigned long    m_page_len;
-    unsigned long    m_page_flags;
-    char            *m_header_buf_ptr;
-    unsigned long    m_header_buf_len;
+
+struct ogg_page_reference {
+    Cbuf3_pointer m_cbuf3_loc;
+    unsigned long m_page_len;
+    unsigned long m_page_flags;
+    char* m_header_buf_ptr;
+    unsigned long m_header_buf_len;
 };
 
 /* These are pointers to song boundaries for write_list (MP3 only) */
 typedef struct writer Writer;
-struct writer
-{
-    int              m_started;
-    int              m_ended;
-    int              m_track_no;
-    Cbuf3_pointer    m_next_byte;
-    Cbuf3_pointer    m_last_byte;
-    FHANDLE          m_file;
+
+struct writer {
+    int m_started;
+    int m_ended;
+    int m_track_no;
+    Cbuf3_pointer m_next_byte;
+    Cbuf3_pointer m_last_byte;
+    FHANDLE m_file;
     AudioFileAllocation m_allocation;
-    struct wav_output *m_wav;
-    struct framed_audio *m_audio;
-    mchar            m_incomplete_filename[SR_MAX_PATH];
-    guint64          m_duration_ms;
-    BOOL             m_duration_known;
-    BOOL             m_is_incomplete;
-    BOOL             m_cleanup_blocked;
-    unsigned int     m_ogg_rate;
-    guint32          m_ogg_serial;
-    guint64          m_ogg_base_ms;
-    TRACK_INFO       m_ti;
+    struct wav_output* m_wav;
+    struct framed_audio* m_audio;
+    mchar m_incomplete_filename[SR_MAX_PATH];
+    guint64 m_duration_ms;
+    BOOL m_duration_known;
+    BOOL m_is_incomplete;
+    BOOL m_cleanup_blocked;
+    unsigned int m_ogg_rate;
+    guint32 m_ogg_serial;
+    guint64 m_ogg_base_ms;
+    TRACK_INFO m_ti;
 };
 
 
 /* The relay server keeps track of a list of clients */
 typedef struct relay_client Relay_client;
-struct relay_client
-{
+
+struct relay_client {
     SOCKET m_sock;
     int m_is_new;
-    int m_icy_metadata;          // true if client requested metadata
-    
-    char* m_buffer;              // large enough for 1 block & 1 metadata
+    int m_icy_metadata; // true if client requested metadata
+
+    char* m_buffer; // large enough for 1 block & 1 metadata
     u_long m_buffer_size;
-    u_long m_offset;             // offset within buffer
+    u_long m_offset; // offset within buffer
     u_long m_left_to_send;
 
-    Cbuf3_pointer m_cbuf_ptr;    // lies along chunck boundary for mp3
+    Cbuf3_pointer m_cbuf_ptr; // lies along chunck boundary for mp3
 
-    char* m_header_buf_ptr;      // for ogg header pages
-    u_long m_header_buf_len;     // for ogg header pages
-    u_long m_header_buf_off;     // for ogg header pages
+    char* m_header_buf_ptr; // for ogg header pages
+    u_long m_header_buf_len; // for ogg header pages
+    u_long m_header_buf_off; // for ogg header pages
 };
 
 #if OGG_VORBIS_FOUND
 typedef struct _stream_processor {
-    void (*process_end)(struct _stream_processor *);
+    void (*process_end)(struct _stream_processor*);
     int isillegal;
     int constraint_violated;
     int shownillegal;
@@ -432,17 +429,17 @@ typedef struct _stream_processor {
     int end;
 
     int num;
-    char *type;
+    char* type;
 
     ogg_uint32_t serial; /* must be 32 bit unsigned */
     ogg_stream_state os;
-    void *data;
+    void* data;
 } stream_processor;
 #endif
 
 typedef struct RELAYLIB_INFO_struct RELAYLIB_INFO;
-struct RELAYLIB_INFO_struct
-{
+
+struct RELAYLIB_INFO_struct {
     HSEM m_sem_not_connected;
     char m_http_header[MAX_HEADER_LEN];
     SOCKET m_listensock;
@@ -456,11 +453,11 @@ struct RELAYLIB_INFO_struct
 #define DATEBUF_LEN 50
 
 typedef struct FILELIB_INFO_struct FILELIB_INFO;
-struct FILELIB_INFO_struct
-{
+
+struct FILELIB_INFO_struct {
     FHANDLE m_show_file;
     AudioFileAllocation m_show_allocation;
-    struct wav_output *m_show_wav;
+    struct wav_output* m_show_wav;
     FHANDLE m_cue_file;
     int m_count;
     int m_do_show;
@@ -487,88 +484,87 @@ struct FILELIB_INFO_struct
 };
 
 
-
 typedef struct stream_prefs STREAM_PREFS;
-struct stream_prefs
-{
+
+struct stream_prefs {
     BOOL metadata_log;
     BOOL reload_rules;
     int hls_variant; /* 0: best, -1: worst, positive: target bandwidth */
     guint64 incomplete_min_duration_ms;
     BOOL tls_insecure;
     BOOL http10;
-    int ip_version;                 /* 0: automatic, 4: IPv4, 6: IPv6; invocation only */
+    int ip_version; /* 0: automatic, 4: IPv4, 6: IPv6; invocation only */
     BOOL wav;
     BOOL tls_info;
     char tls_ca_file[SR_MAX_PATH];
-    char label[MAX_URL_LEN];		// logical name for this stream
-    char url[MAX_URL_LEN];		// url of the stream to connect to
-    char proxyurl[MAX_URL_LEN];		// url of a http proxy server, 
-                                        //  '\0' otherwise
-    char output_directory[SR_MAX_PATH];	// base directory to output files too
-    char output_pattern[SR_MAX_PATH];	// filename pattern when ripping 
-                                        //  with splitting
-    char showfile_pattern[SR_MAX_PATH];	// filename base when ripping to
-                                        //  single file without splitting
-    char if_name[SR_MAX_PATH];		// local interface to use
-    char rules_file[SR_MAX_PATH];       // file that holds rules for 
-                                        //  parsing metadata
-    char pls_file[SR_MAX_PATH];		// optional, where to create a 
-                                        //  rely .pls file
-    char relay_ip[SR_MAX_PATH];		// optional, ip to bind relaying 
-                                        //  socket to
-    char ext_cmd[SR_MAX_PATH];          // cmd to spawn for external metadata
-    char useragent[MAX_USERAGENT_STR];	// optional, use a different useragent
-    u_short relay_port;			// port to use for the relay server
-					//  GCS 3/30/07 change to u_short
-    u_short max_port;			// highest port the relay server 
-                                        //  can look if it needs to search
-    u_long max_connections;             // max number of connections 
-                                        //  to relay stream
-					//  GCS 8/18/07 change int to u_long
-    u_long maxMB_rip_size;		// max number of megabytes that 
-                                        //  can by writen out before we stop
-    u_long flags;			// all booleans logically OR'd 
-                                        //  together (see above)
-    u_long timeout;			// timeout, in seconds, before a 
-                                        //  stalled connection is forcefully 
-                                        //  closed
-					//  GCS 8/18/07 change int to u_long
-    u_long dropcount;			// number of tracks at beginning 
-                                        //  of connection to always ignore
-					//  GCS 8/18/07 change int to u_long
-    int count_start;                    // which number to start counting?
-    enum OverwriteOpt overwrite;	// overwrite file in complete?
-    SPLITPOINT_OPTIONS sp_opt;		// options for splitpoint rules
-    CODESET_OPTIONS cs_opt;             // which codeset should i use?
+    char label[MAX_URL_LEN]; // logical name for this stream
+    char url[MAX_URL_LEN]; // url of the stream to connect to
+    char proxyurl[MAX_URL_LEN]; // url of a http proxy server,
+    //  '\0' otherwise
+    char output_directory[SR_MAX_PATH]; // base directory to output files too
+    char output_pattern[SR_MAX_PATH]; // filename pattern when ripping
+    //  with splitting
+    char showfile_pattern[SR_MAX_PATH]; // filename base when ripping to
+    //  single file without splitting
+    char if_name[SR_MAX_PATH]; // local interface to use
+    char rules_file[SR_MAX_PATH]; // file that holds rules for
+    //  parsing metadata
+    char pls_file[SR_MAX_PATH]; // optional, where to create a
+    //  rely .pls file
+    char relay_ip[SR_MAX_PATH]; // optional, ip to bind relaying
+    //  socket to
+    char ext_cmd[SR_MAX_PATH]; // cmd to spawn for external metadata
+    char useragent[MAX_USERAGENT_STR]; // optional, use a different useragent
+    u_short relay_port; // port to use for the relay server
+    //  GCS 3/30/07 change to u_short
+    u_short max_port; // highest port the relay server
+    //  can look if it needs to search
+    u_long max_connections; // max number of connections
+    //  to relay stream
+    //  GCS 8/18/07 change int to u_long
+    u_long maxMB_rip_size; // max number of megabytes that
+    //  can by writen out before we stop
+    u_long flags; // all booleans logically OR'd
+    //  together (see above)
+    u_long timeout; // timeout, in seconds, before a
+    //  stalled connection is forcefully
+    //  closed
+    //  GCS 8/18/07 change int to u_long
+    u_long dropcount; // number of tracks at beginning
+    //  of connection to always ignore
+    //  GCS 8/18/07 change int to u_long
+    int count_start; // which number to start counting?
+    enum OverwriteOpt overwrite; // overwrite file in complete?
+    SPLITPOINT_OPTIONS sp_opt; // options for splitpoint rules
+    CODESET_OPTIONS cs_opt; // which codeset should i use?
 };
 
 
 typedef struct global_prefs GLOBAL_PREFS;
-struct global_prefs
-{
-    char version[MAX_VERSION_LEN];             // default stream
-    char url[MAX_URL_LEN];                     // default stream
-    STREAM_PREFS stream_prefs;                 // default prefs for new streams
+
+struct global_prefs {
+    char version[MAX_VERSION_LEN]; // default stream
+    char url[MAX_URL_LEN]; // default stream
+    STREAM_PREFS stream_prefs; // default prefs for new streams
 };
 
 typedef struct RIP_MANAGER_INFOst RIP_MANAGER_INFO;
-typedef void(*RIP_MANAGER_CALLBACK)(RIP_MANAGER_INFO* rmi, 
-				    int message, void *data);
-struct RIP_MANAGER_INFOst
-{
-    STREAM_PREFS *prefs;
-    struct stream_capture *capture;
+typedef void (*RIP_MANAGER_CALLBACK)(RIP_MANAGER_INFO* rmi,
+                                     int message, void* data);
+
+struct RIP_MANAGER_INFOst {
+    STREAM_PREFS* prefs;
+    struct stream_capture* capture;
     BOOL flac_in_ogg;
     BOOL relay_skip_warned;
     char streamname[MAX_STREAMNAME_LEN];
     char server_name[MAX_SERVER_LEN];
     char stream_host[MAX_URL_LEN];
-    int	status;
-    int	meta_interval;
+    int status;
+    int meta_interval;
 
     /* Bitrate as reported by http header */
-    int	http_bitrate;
+    int http_bitrate;
 
     /* Bitrate detected in first frame */
     int detected_bitrate;
@@ -577,7 +573,7 @@ struct RIP_MANAGER_INFOst
     int bitrate;
 
     /* Process id & handle for external process */
-    External_Process *ep;
+    External_Process* ep;
 
 #if __UNIX__
     /* Write to the abort pipe to exit select() of the ripping thread */
@@ -590,7 +586,7 @@ struct RIP_MANAGER_INFOst
     guint64 retry_after_seconds;
     HSEM started_sem;
 
-    /* Info from stream http header.  It's used for generating relay 
+    /* Info from stream http header.  It's used for generating relay
        header, and formatting strings for winamp playlist. */
     SR_HTTP_HEADER http_info;
 
@@ -605,15 +601,15 @@ struct RIP_MANAGER_INFOst
     RIP_MANAGER_CALLBACK status_callback;
 
     /* Callback data */
-    u_long callback_filesize;             /* bytes written to current track */
-    struct framed_audio *callback_audio_clock; /* Incoming frame duration, including excluded tracks */
+    u_long callback_filesize; /* bytes written to current track */
+    struct framed_audio* callback_audio_clock; /* Incoming frame duration, including excluded tracks */
     guint64 callback_duration_ms;
     BOOL callback_duration_known;
-    BOOL callback_incomplete;            /* Initial-track decision for the displayed title */
-    BOOL callback_filtered;              /* Metadata rules exclude the displayed title */
-    char callback_filename[SR_MAX_PATH];  /* not the filename, the trackname */
+    BOOL callback_incomplete; /* Initial-track decision for the displayed title */
+    BOOL callback_filtered; /* Metadata rules exclude the displayed title */
+    char callback_filename[SR_MAX_PATH]; /* not the filename, the trackname */
 
-    /* Bytes ripped is stored to send to callback, also used to decide 
+    /* Bytes ripped is stored to send to callback, also used to decide
        when to stop based on bytes ripped. */
     u_long bytes_ripped;
     u_long megabytes_ripped;
@@ -628,9 +624,9 @@ struct RIP_MANAGER_INFOst
     int ogg_track_state;
 
     /* Title & artist info */
-    TRACK_INFO old_track;	    /* The track that's being ripped now */
-    TRACK_INFO new_track;	    /* The track that's gonna start soon */
-    TRACK_INFO current_track;       /* The metadata as I'm parsing it */
+    TRACK_INFO old_track; /* The track that's being ripped now */
+    TRACK_INFO new_track; /* The track that's gonna start soon */
+    TRACK_INFO current_track; /* The metadata as I'm parsing it */
 
     /* After the first buffer, we collect statistics about the stream */
     int ripstream_first_time_through;
@@ -642,7 +638,7 @@ struct RIP_MANAGER_INFOst
     char* getbuffer;
     unsigned long getbuffer_size;
 
-    /* A counter that keeps track of how many more blocks to read before 
+    /* A counter that keeps track of how many more blocks to read before
        we can do silence detection.  Used by ripstream.c */
     int find_silence;
 
@@ -656,19 +652,19 @@ struct RIP_MANAGER_INFOst
     struct cbuf3 cbuf3;
 
     /* CBuf size variables.  Used by ripstream.c */
-    int cbuf2_size;             /* blocks */
-    int rw_start_to_cb_end;     /* bytes */
-    int rw_start_to_sw_start;   /* milliseconds */
-    int rw_end_to_cb_end;       /* bytes */
-    int mic_to_cb_end;          /* blocks */
+    int cbuf2_size; /* blocks */
+    int rw_start_to_cb_end; /* bytes */
+    int rw_start_to_sw_start; /* milliseconds */
+    int rw_end_to_cb_end; /* bytes */
+    int mic_to_cb_end; /* blocks */
 
     /* The Relay list */
-    GQueue *relay_list;
+    GQueue* relay_list;
     HSEM relay_list_sem;
 
     /* Private data used by filelib.c */
     FILELIB_INFO filelib_info;
-    GList *recording_locks;          /* Held across reconnects until final shutdown */
+    GList* recording_locks; /* Held across reconnects until final shutdown */
 
     /* Private data used by relaylib.c */
     RELAYLIB_INFO relaylib_info;

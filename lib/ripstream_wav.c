@@ -19,27 +19,24 @@ struct wav_output {
     struct mad_stream stream;
     struct mad_frame frame;
     struct mad_synth synth;
-    GByteArray *pending;
+    GByteArray* pending;
     unsigned int channels;
     unsigned int rate;
     uint32_t bytes;
     error_code error;
 };
 
-static void put16(unsigned char *p, unsigned int value)
-{
+static void put16(unsigned char* p, unsigned int value) {
     p[0] = value;
     p[1] = value >> 8;
 }
 
-static void put32(unsigned char *p, uint32_t value)
-{
+static void put32(unsigned char* p, uint32_t value) {
     put16(p, value);
     put16(p + 2, value >> 16);
 }
 
-static error_code write_all(WavOutput *out, const unsigned char *data, size_t size)
-{
+static error_code write_all(WavOutput* out, const unsigned char* data, size_t size) {
     FHANDLE file = out->file;
     audio_file_reserve(file, &out->allocation, size);
     while (size) {
@@ -49,7 +46,8 @@ static error_code write_all(WavOutput *out, const unsigned char *data, size_t si
             return SR_ERROR_CANT_WRITE_TO_FILE;
 #else
         ssize_t count = write(file, data, size);
-        if (count <= 0) return SR_ERROR_CANT_WRITE_TO_FILE;
+        if (count <= 0)
+            return SR_ERROR_CANT_WRITE_TO_FILE;
 #endif
         data += count;
         size -= count;
@@ -57,8 +55,7 @@ static error_code write_all(WavOutput *out, const unsigned char *data, size_t si
     return SR_SUCCESS;
 }
 
-static error_code write_header(WavOutput *out)
-{
+static error_code write_header(WavOutput* out) {
     unsigned char h[44] = {0};
     unsigned int channels = out->channels ? out->channels : 2;
     unsigned int rate = out->rate ? out->rate : 44100;
@@ -82,23 +79,25 @@ static error_code write_header(WavOutput *out)
             return SR_ERROR_CANT_WRITE_TO_FILE;
     }
 #else
-    if (lseek(out->file, 0, SEEK_SET) < 0) return SR_ERROR_CANT_WRITE_TO_FILE;
+    if (lseek(out->file, 0, SEEK_SET) < 0)
+        return SR_ERROR_CANT_WRITE_TO_FILE;
 #endif
     return write_all(out, h, sizeof(h));
 }
 
 /* Round and clip libmad's fixed-point samples to signed 16-bit PCM. */
-static int scale(mad_fixed_t sample)
-{
+static int scale(mad_fixed_t sample) {
     sample += 1L << (MAD_F_FRACBITS - 16);
-    if (sample >= MAD_F_ONE) sample = MAD_F_ONE - 1;
-    else if (sample < -MAD_F_ONE) sample = -MAD_F_ONE;
+    if (sample >= MAD_F_ONE)
+        sample = MAD_F_ONE - 1;
+    else
+        if (sample < -MAD_F_ONE)
+            sample = -MAD_F_ONE;
     return sample >> (MAD_F_FRACBITS + 1 - 16);
 }
 
-static error_code decode(WavOutput *out)
-{
-    const unsigned char *remaining = NULL;
+static error_code decode(WavOutput* out) {
+    const unsigned char* remaining = NULL;
     unsigned int consumed;
     mad_stream_buffer(&out->stream, out->pending->data, out->pending->len);
     while (1) {
@@ -109,7 +108,8 @@ static error_code decode(WavOutput *out)
                 remaining = out->stream.next_frame;
                 break;
             }
-            if (MAD_RECOVERABLE(out->stream.error)) continue;
+            if (MAD_RECOVERABLE(out->stream.error))
+                continue;
             return SR_ERROR_DECODE_FAILURE;
         }
         mad_synth_frame(&out->synth, &out->frame);
@@ -140,9 +140,8 @@ static error_code decode(WavOutput *out)
     return SR_SUCCESS;
 }
 
-error_code wav_output_init(WavOutput **output, FHANDLE file)
-{
-    WavOutput *out = g_new0(WavOutput, 1);
+error_code wav_output_init(WavOutput** output, FHANDLE file) {
+    WavOutput* out = g_new0(WavOutput, 1);
     *output = out;
     out->file = file;
     out->pending = g_byte_array_new();
@@ -153,45 +152,47 @@ error_code wav_output_init(WavOutput **output, FHANDLE file)
     return out->error;
 }
 
-error_code wav_output_write(WavOutput *out, const char *data, size_t size)
-{
-    if (out->error != SR_SUCCESS) return out->error;
+error_code wav_output_write(WavOutput* out, const char* data, size_t size) {
+    if (out->error != SR_SUCCESS)
+        return out->error;
     /* Decoder buffering must stay bounded even for malformed input. */
     while (size) {
         size_t count = MIN(size, 16384);
         if (out->pending->len + count > 65536)
             return out->error = SR_ERROR_DECODE_FAILURE;
-        g_byte_array_append(out->pending, (const guint8 *)data, count);
+        g_byte_array_append(out->pending, (const guint8*)data, count);
         out->error = decode(out);
-        if (out->error != SR_SUCCESS) return out->error;
+        if (out->error != SR_SUCCESS)
+            return out->error;
         data += count;
         size -= count;
     }
     return SR_SUCCESS;
 }
 
-error_code wav_output_finish(WavOutput **output)
-{
+error_code wav_output_finish(WavOutput** output) {
     return wav_output_finish_duration(output, NULL);
 }
 
-error_code wav_output_finish_duration(WavOutput **output, guint64 *duration_ms)
-{
-    WavOutput *out = *output;
+error_code wav_output_finish_duration(WavOutput** output, guint64* duration_ms) {
+    WavOutput* out = *output;
     error_code rc, header_rc;
     const guint8 guard[MAD_BUFFER_GUARD] = {0};
-    if (!out) return SR_SUCCESS;
+    if (!out)
+        return SR_SUCCESS;
     if (out->pending->len && out->error == SR_SUCCESS) {
         g_byte_array_append(out->pending, guard, sizeof(guard));
         out->error = decode(out);
     }
     rc = out->error;
-    if (rc == SR_SUCCESS && !out->channels) rc = SR_ERROR_DECODE_FAILURE;
+    if (rc == SR_SUCCESS && !out->channels)
+        rc = SR_ERROR_DECODE_FAILURE;
     header_rc = write_header(out);
     audio_file_release(out->file, &out->allocation);
     if (duration_ms)
         *duration_ms = out->rate && out->channels
-            ? (guint64)out->bytes * 1000 / (out->rate * out->channels * 2) : 0;
+            ? (guint64)out->bytes * 1000 / (out->rate * out->channels * 2)
+            : 0;
     mad_synth_finish(&out->synth);
     mad_frame_finish(&out->frame);
     mad_stream_finish(&out->stream);

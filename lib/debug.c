@@ -25,11 +25,11 @@
 #include "debug.h"
 
 #if WIN32
-    #define vsnprintf _vsnprintf
-    #define vswprintf _vsnwprintf
+#define vsnprintf _vsnprintf
+#define vswprintf _vsnwprintf
 #else
-    /* This prototype is missing in some systems */
-    int vswprintf (wchar_t * ws, size_t n, const wchar_t * format, va_list arg);
+/* This prototype is missing in some systems */
+int vswprintf(wchar_t* ws, size_t n, const wchar_t* format, va_list arg);
 #endif
 
 /*****************************************************************************
@@ -45,98 +45,95 @@ static char* default_filename = "streamripper-debug-log.txt";
 static int debug_initialized = 0;
 
 void
-debug_set_filename (char* filename)
-{
-    sr_strncpy (filename_buf, filename, SR_MAX_PATH);
+debug_set_filename(char* filename) {
+    sr_strncpy(filename_buf, filename, SR_MAX_PATH);
     debug_filename = filename_buf;
 }
 
 void
-debug_enable (void)
-{
+debug_enable(void) {
     debug_on = 1;
     if (!debug_filename) {
-	debug_filename = default_filename;
+        debug_filename = default_filename;
     }
 }
 
 void
-debug_open (void)
-{
-    if (!debug_on) return;
+debug_open(void) {
+    if (!debug_on)
+        return;
     if (!gcsfp) {
-	gcsfp = fopen(debug_filename, "a");
-	if (!gcsfp) {
-	    debug_on = 0;
-	}
+        gcsfp = fopen(debug_filename, "a");
+        if (!gcsfp) {
+            debug_on = 0;
+        }
     }
 }
 
 void
-debug_close (void)
-{
-    if (!debug_on) return;
+debug_close(void) {
+    if (!debug_on)
+        return;
     if (gcsfp) {
-	fclose(gcsfp);
-	gcsfp = 0;
+        fclose(gcsfp);
+        gcsfp = 0;
     }
 }
 
 void
-debug_printf (char* fmt, ...)
-{
+debug_printf(char* fmt, ...) {
     int was_open = 1;
     va_list argptr;
 
     if (!debug_on) {
-	return;
+        return;
     }
 
     if (!debug_initialized) {
         m_debug_lock = threadlib_create_sem();
         threadlib_signal_sem(&m_debug_lock);
     }
-    threadlib_waitfor_sem (&m_debug_lock);
+    threadlib_waitfor_sem(&m_debug_lock);
 
-    va_start (argptr, fmt);
+    va_start(argptr, fmt);
     if (!gcsfp) {
-	was_open = 0;
-	debug_open();
-	if (!gcsfp) return;
+        was_open = 0;
+        debug_open();
+        if (!gcsfp)
+            return;
     }
     if (!debug_initialized) {
-	debug_initialized = 1;
-	fprintf (gcsfp, "=========================\n");
-	fprintf (gcsfp, "STREAMRIPPER " SRPLATFORM " " SRVERSION "\n");
+        debug_initialized = 1;
+        fprintf(gcsfp, "=========================\n");
+        fprintf(gcsfp, "STREAMRIPPER " SRPLATFORM " " SRVERSION "\n");
     }
 
-    vfprintf (gcsfp, fmt, argptr);
-    fflush (gcsfp);
+    vfprintf(gcsfp, fmt, argptr);
+    fflush(gcsfp);
 
-    va_end (argptr);
+    va_end(argptr);
     if (!was_open) {
-	debug_close ();
+        debug_close();
     }
-    threadlib_signal_sem (&m_debug_lock);
+    threadlib_signal_sem(&m_debug_lock);
 }
 
 void
-debug_print_error (void)
-{
+debug_print_error(void) {
 #if defined (WIN32)
     LPVOID lpMsgBuf;
-    FormatMessage (
-	FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-	FORMAT_MESSAGE_FROM_SYSTEM | 
-	FORMAT_MESSAGE_IGNORE_INSERTS,
-	NULL,
-	GetLastError(),
-	MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), // Default language
-	(LPTSTR) &lpMsgBuf,
-	0,
-	NULL 
-    );
-    debug_printf ("%s", lpMsgBuf);
-    LocalFree (lpMsgBuf);
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        GetLastError(),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), // Default language
+        (LPTSTR)&lpMsgBuf,
+        0,
+        NULL
+        );
+    debug_printf("%s", lpMsgBuf);
+    LocalFree(lpMsgBuf);
 #endif
 }

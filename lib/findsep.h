@@ -22,35 +22,35 @@
 #include "errors.h"
 
 error_code
-findsep_silence (const char* mpgbuf, 
-		 long mpgsize, 
-		 long len_to_sw,
-		 long searchwindow,
-		 long silence_length, 
-		 long padding1,
-		 long padding2,
-		 u_long* pos1, 
-		 u_long* pos2
-		 );
+findsep_silence(const char* mpgbuf,
+                long mpgsize,
+                long len_to_sw,
+                long searchwindow,
+                long silence_length,
+                long padding1,
+                long padding2,
+                u_long* pos1,
+                u_long* pos2
+    );
 error_code
-findsep_silence_2 (const char* mpgbuf, 
-		 long mpgsize, 
-		 long len_to_sw,
-		 long searchwindow,
-		 long silence_length, 
-		 long padding1,
-		 long padding2,
-		 u_long* pos1, 
-		 u_long* pos2
-		 );
+findsep_silence_2(const char* mpgbuf,
+                  long mpgsize,
+                  long len_to_sw,
+                  long searchwindow,
+                  long silence_length,
+                  long padding1,
+                  long padding2,
+                  u_long* pos1,
+                  u_long* pos2
+    );
 error_code
-find_bitrate (unsigned long* bitrate, const char* mpgbuf, long mpgsize);
+find_bitrate(unsigned long* bitrate, const char* mpgbuf, long mpgsize);
 
 /* Exclusive ADTS boundaries; decoding failure lets the caller retain its
    frame-aligned metadata boundary. Uses the standard silence search. */
-error_code findsep_silence_aac(const char *buffer, long size, long search_start,
-                             long search_length, long silence_length,
-                             long padding1, long padding2,
-                             u_long *end_previous, u_long *start_next);
+error_code findsep_silence_aac(const char* buffer, long size, long search_start,
+                               long search_length, long silence_length,
+                               long padding1, long padding2,
+                               u_long* end_previous, u_long* start_next);
 
 #endif //__FINDSEP_H__

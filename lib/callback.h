@@ -20,7 +20,7 @@
 #include "srtypes.h"
 
 // Messages for status_callback hook in rip_manager_init()
-// used for notifing to client whats going on *DO NOT* call 
+// used for notifing to client whats going on *DO NOT* call
 // rip_mananger_start or rip_mananger_stop from
 // these functions!!! it will cause a deadlock
 #define RM_UPDATE	0x01	// returns a pointer RIP_MANAGER_INFO struct
@@ -40,12 +40,12 @@
 
 /* Public functions */
 void
-callback_post_status (RIP_MANAGER_INFO* rmi, int status);
+callback_post_status(RIP_MANAGER_INFO* rmi, int status);
 void
-callback_post_error (RIP_MANAGER_INFO* rmi, error_code err);
+callback_post_error(RIP_MANAGER_INFO* rmi, error_code err);
 error_code
-callback_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti);
+callback_start_track(RIP_MANAGER_INFO* rmi, TRACK_INFO* ti);
 void
-callback_put_data (RIP_MANAGER_INFO *rmi, u_long size);
+callback_put_data(RIP_MANAGER_INFO* rmi, u_long size);
 
 #endif //__CALLBACK_H__

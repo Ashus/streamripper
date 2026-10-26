@@ -18,11 +18,11 @@
  * Rip Manager API
  *
  *   Callback Function
- *     void (*status_callback)(RIP_MANAGER_INFO* rmi, 
+ *     void (*status_callback)(RIP_MANAGER_INFO* rmi,
  *                              int message, void *data));
  *   Functions
  *     void rip_manager_init (void);
- *     error_code rip_manager_start (RIP_MANAGER_INFO **rmi, 
+ *     error_code rip_manager_start (RIP_MANAGER_INFO **rmi,
  *	  STREAM_PREFS *prefs, RIP_MANAGER_CALLBACK status_callback);
  *     void rip_manager_stop (RIP_MANAGER_INFO *rmi);
  *     void rip_manager_cleanup (void);
@@ -61,41 +61,39 @@
  * Public functions
  *****************************************************************************/
 void
-callback_post_status (RIP_MANAGER_INFO* rmi, int status)
-{
+callback_post_status(RIP_MANAGER_INFO* rmi, int status) {
     if (status != 0)
         rmi->status = status;
-    rmi->status_callback (rmi, RM_UPDATE, 0);
+    rmi->status_callback(rmi, RM_UPDATE, 0);
 }
 
 void
-callback_post_error (RIP_MANAGER_INFO* rmi, error_code err)
-{
+callback_post_error(RIP_MANAGER_INFO* rmi, error_code err) {
     ERROR_INFO err_info;
     err_info.error_code = err;
-    strcpy(err_info.error_str, errors_get_string (err));
-    debug_printf ("post_error: %d %s\n", err_info.error_code, 
-		  err_info.error_str);
-    rmi->status_callback (rmi, RM_ERROR, &err_info);
+    strcpy(err_info.error_str, errors_get_string(err));
+    debug_printf("post_error: %d %s\n", err_info.error_code,
+                 err_info.error_str);
+    rmi->status_callback(rmi, RM_ERROR, &err_info);
 }
 
-/* 
- * This is called by ripstream when we get a new track. 
+/*
+ * This is called by ripstream when we get a new track.
  * most logic is handled by filelib_start() so we just
- * make sure there are no bad characters in the name and 
- * update via the callback 
+ * make sure there are no bad characters in the name and
+ * update via the callback
  */
 error_code
-callback_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti)
-{
+callback_start_track(RIP_MANAGER_INFO* rmi, TRACK_INFO* ti) {
     mchar console_string[SR_MAX_PATH];
 
     /* Compose the string for the console output */
     if (!ti->artist[0] && !ti->title[0]) {
         mstrcpy(console_string, m_("-"));
-    } else {
-        msnprintf (console_string, SR_MAX_PATH, m_S m_(" - ") m_S,
-                   ti->artist, ti->title);
+    }
+    else {
+        msnprintf(console_string, SR_MAX_PATH, m_S m_(" - ") m_S,
+                  ti->artist, ti->title);
     }
     rmi->callback_filesize = 0;
     rmi->callback_incomplete = rmi->track_count < rmi->prefs->dropcount;
@@ -103,26 +101,25 @@ callback_start_track (RIP_MANAGER_INFO *rmi, TRACK_INFO* ti)
     framed_audio_counter_init(&rmi->callback_audio_clock, rmi->http_info.content_type);
     rmi->callback_duration_known = FALSE;
     rmi->callback_duration_ms = 0;
-    string_from_gstring (rmi, rmi->callback_filename, 
-			 SR_MAX_PATH, console_string, 
-			 CODESET_UTF8);
-    rmi->callback_filename[SR_MAX_PATH-1] = '\0';
-    rmi->status_callback (rmi, RM_NEW_TRACK, (void*) rmi->callback_filename);
-    callback_post_status (rmi, 0);
+    string_from_gstring(rmi, rmi->callback_filename,
+                        SR_MAX_PATH, console_string,
+                        CODESET_UTF8);
+    rmi->callback_filename[SR_MAX_PATH - 1] = '\0';
+    rmi->status_callback(rmi, RM_NEW_TRACK, (void*)rmi->callback_filename);
+    callback_post_status(rmi, 0);
 
     return SR_SUCCESS;
 }
 
 void
-callback_put_data (RIP_MANAGER_INFO *rmi, u_long size)
-{
+callback_put_data(RIP_MANAGER_INFO* rmi, u_long size) {
     /* This is used by the GUI */
     rmi->callback_filesize += size;
 
     /* This is used to determine when to quit */
     rmi->bytes_ripped += size;
     while (rmi->bytes_ripped >= 1048576) {
-	rmi->bytes_ripped -= 1048576;
-	rmi->megabytes_ripped++;
+        rmi->bytes_ripped -= 1048576;
+        rmi->megabytes_ripped++;
     }
 }

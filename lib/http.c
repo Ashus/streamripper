@@ -27,21 +27,21 @@
 /******************************************************************************
  * Function prototypes
  *****************************************************************************/
-static char* make_auth_header(const char *header_name, 
-			      const char *username, const char *password);
-static char* b64enc(const char *buf, int size);
-static guint64 retry_after_delay(char *header);
+static char* make_auth_header(const char* header_name,
+                              const char* username, const char* password);
+static char* b64enc(const char* buf, int size);
+static guint64 retry_after_delay(char* header);
 static error_code
-http_get_pls (RIP_MANAGER_INFO* rmi, HSOCKET *sock, SR_HTTP_HEADER *info);
+http_get_pls(RIP_MANAGER_INFO* rmi, HSOCKET* sock, SR_HTTP_HEADER* info);
 static error_code
-http_get_m3u (RIP_MANAGER_INFO* rmi, HSOCKET *sock, SR_HTTP_HEADER *info);
+http_get_m3u(RIP_MANAGER_INFO* rmi, HSOCKET* sock, SR_HTTP_HEADER* info);
 static error_code
-http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url, 
-		   HSOCKET *sock, SR_HTTP_HEADER *info);
+http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url,
+                   HSOCKET* sock, SR_HTTP_HEADER* info);
 static error_code
-http_parse_url(const char *url, URLINFO *urlinfo);
-static error_code http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
-                                    const URLINFO *target, const URLINFO *proxy, const char *useragent);
+http_parse_url(const char* url, URLINFO* urlinfo);
+static error_code http_proxy_connect(RIP_MANAGER_INFO* rmi, HSOCKET* sock,
+                                     const URLINFO* target, const URLINFO* proxy, const char* useragent);
 
 /******************************************************************************
  * Private Vars
@@ -53,13 +53,12 @@ static error_code http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
 /******************************************************************************
  * Public functions
  *****************************************************************************/
-/* Connect to a shoutcast type stream, leaves when it's about to 
+/* Connect to a shoutcast type stream, leaves when it's about to
    get the header info */
 static error_code
-http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
-		 HSOCKET *sock, const char *url, const char *proxyurl, 
-		 SR_HTTP_HEADER *info, char *useragent, char *if_name, int redirects)
-{
+http_sc_connect_internal(RIP_MANAGER_INFO* rmi,
+                         HSOCKET* sock, const char* url, const char* proxyurl,
+                         SR_HTTP_HEADER* info, char* useragent, char* if_name, int redirects) {
     char headbuf[MAX_HEADER_LEN];
     URLINFO url_info;
     URLINFO target_info;
@@ -67,79 +66,88 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
     BOOL target_tls = g_ascii_strncasecmp(url, "https://", 8) == 0;
     BOOL proxy_tls = proxyurl && g_ascii_strncasecmp(proxyurl, "https://", 8) == 0;
 
-    if (redirects > 10) return SR_ERROR_INVALID_URL;
+    if (redirects > 10)
+        return SR_ERROR_INVALID_URL;
     while (1) {
-	if ((ret = http_parse_url(url, &target_info)) != SR_SUCCESS) return ret;
+        if ((ret = http_parse_url(url, &target_info)) != SR_SUCCESS)
+            return ret;
 #ifndef HAVE_OPENSSL
-        if (target_tls || proxy_tls) return SR_ERROR_INVALID_URL;
+        if (target_tls || proxy_tls)
+            return SR_ERROR_INVALID_URL;
 #endif
 #ifdef HAVE_OPENSSL
         socklib_free_tls(sock);
 #endif
-	debug_printf ("***** URL = %s *****\n", url);
-	debug_printf("http_sc_connect(): calling http_parse_url\n");
-	if (proxyurl) {
-	    debug_printf ("***** PROXY = %s *****\n", proxyurl);
-	    if ((ret = http_parse_url (proxyurl, &url_info)) != SR_SUCCESS) {
-		return ret;
-	    }
-	} else if ((ret = http_parse_url (url, &url_info)) != SR_SUCCESS) {
-	    return ret;
-	}
+        debug_printf("***** URL = %s *****\n", url);
+        debug_printf("http_sc_connect(): calling http_parse_url\n");
+        if (proxyurl) {
+            debug_printf("***** PROXY = %s *****\n", proxyurl);
+            if ((ret = http_parse_url(proxyurl, &url_info)) != SR_SUCCESS) {
+                return ret;
+            }
+        }
+        else if ((ret = http_parse_url(url, &url_info)) != SR_SUCCESS) {
+            return ret;
+        }
 
-	debug_printf ("http_sc_connect(): calling socklib_open"
-		      " host=%s, port=%d\n", url_info.host, url_info.port);
-	ret = socklib_open (sock, url_info.host, url_info.port, if_name, 
-			    rmi->prefs->timeout, rmi->prefs->ip_version);
-	if (ret != SR_SUCCESS) {
-	    return ret;
-	}
+        debug_printf("http_sc_connect(): calling socklib_open"
+                     " host=%s, port=%d\n", url_info.host, url_info.port);
+        ret = socklib_open(sock, url_info.host, url_info.port, if_name,
+                           rmi->prefs->timeout, rmi->prefs->ip_version);
+        if (ret != SR_SUCCESS) {
+            return ret;
+        }
 
 #ifdef HAVE_OPENSSL
         if (proxy_tls) {
             ret = socklib_start_tls(sock, url_info.host, rmi->prefs, TRUE);
-            if (ret != SR_SUCCESS) return ret;
+            if (ret != SR_SUCCESS)
+                return ret;
         }
 #endif
         if (proxyurl && target_tls) {
             ret = http_proxy_connect(rmi, sock, &target_info, &url_info, useragent);
-            if (ret != SR_SUCCESS) return ret;
+            if (ret != SR_SUCCESS)
+                return ret;
         }
 #ifdef HAVE_OPENSSL
         if (target_tls) {
             ret = socklib_start_tls(sock, target_info.host, rmi->prefs, FALSE);
-            if (ret != SR_SUCCESS) return ret;
+            if (ret != SR_SUCCESS)
+                return ret;
         }
 #endif
 
-	debug_printf("http_sc_connect(): calling http_construct_sc_request\n");
-	ret = http_construct_sc_request (url, target_tls ? NULL : proxyurl, headbuf, useragent);
+        debug_printf("http_sc_connect(): calling http_construct_sc_request\n");
+        ret = http_construct_sc_request(url, target_tls ? NULL : proxyurl, headbuf, useragent);
         if (ret == SR_SUCCESS && rmi->prefs->http10) {
-            char *version = strstr(headbuf, " HTTP/1.1\r\n");
-            if (version) version[8] = '0';
+            char* version = strstr(headbuf, " HTTP/1.1\r\n");
+            if (version)
+                version[8] = '0';
         }
-	if (ret != SR_SUCCESS) {
-	    return ret;
-	}
+        if (ret != SR_SUCCESS) {
+            return ret;
+        }
 
-	debug_printf("http_sc_connect(): calling socklib_sendall\n");
-	ret = socklib_sendall (sock, headbuf, strlen(headbuf));
-	if (ret < 0) {
-	    return ret;
-	}
+        debug_printf("http_sc_connect(): calling socklib_sendall\n");
+        ret = socklib_sendall(sock, headbuf, strlen(headbuf));
+        if (ret < 0) {
+            return ret;
+        }
 
-	debug_printf("http_sc_connect(): calling http_get_sc_header\n");
+        debug_printf("http_sc_connect(): calling http_get_sc_header\n");
         ret = http_get_sc_header(rmi, url, sock, info);
         rmi->retry_after_seconds = info->retry_after_seconds;
-        if (ret != SR_SUCCESS) return ret;
+        if (ret != SR_SUCCESS)
+            return ret;
 
-	if (*info->http_location) {
-	    /* RECURSIVE CASE */
-	    debug_printf ("Redirecting: %s\n", info->http_location);
+        if (*info->http_location) {
+            /* RECURSIVE CASE */
+            debug_printf("Redirecting: %s\n", info->http_location);
             char redirect[MAX_URL_LEN];
 #if defined(SR_MODERN_WINDOWS) || defined(SR_CMAKE_POSIX)
-            GError *error = NULL;
-            char *resolved = g_uri_resolve_relative(url, info->http_location, G_URI_FLAGS_ENCODED, &error);
+            GError* error = NULL;
+            char* resolved = g_uri_resolve_relative(url, info->http_location, G_URI_FLAGS_ENCODED, &error);
             if (!resolved || strlen(resolved) >= sizeof(redirect)) {
                 g_free(resolved);
                 g_clear_error(&error);
@@ -151,15 +159,16 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
             g_strlcpy(redirect, info->http_location, sizeof(redirect));
 #endif
             socklib_close(sock);
-	    return http_sc_connect_internal (rmi, sock, redirect,
-				    proxyurl, info, useragent, if_name, redirects + 1);
-	} else {
+            return http_sc_connect_internal(rmi, sock, redirect,
+                                            proxyurl, info, useragent, if_name, redirects + 1);
+        }
+        else {
             g_strlcpy(info->effective_url, url, sizeof(info->effective_url));
             g_snprintf(rmi->stream_host, sizeof(rmi->stream_host),
                        strchr(target_info.host, ':') ? "[%s]:%d" : "%s:%d",
                        target_info.host, target_info.port);
-	    break;
-	}
+            break;
+        }
     }
 
     return SR_SUCCESS;
@@ -169,29 +178,28 @@ http_sc_connect_internal (RIP_MANAGER_INFO* rmi,
  * Private functions
  *****************************************************************************/
 error_code
-http_sc_connect (RIP_MANAGER_INFO* rmi, HSOCKET *sock, const char *url,
-                 const char *proxyurl, SR_HTTP_HEADER *info, char *useragent, char *if_name)
-{
+http_sc_connect(RIP_MANAGER_INFO* rmi, HSOCKET* sock, const char* url,
+                const char* proxyurl, SR_HTTP_HEADER* info, char* useragent, char* if_name) {
     return http_sc_connect_internal(rmi, sock, url, proxyurl, info, useragent, if_name, 0);
 }
 
 /* See http://www.ietf.org/rfc/rfc3986.txt */
 static void
-unescape_pct_encoding (char* s)
-{
+unescape_pct_encoding(char* s) {
     char* d = s;
     char c[3];
 
     while (*s) {
-	if (*s == '%' && isxdigit(*(s+1)) && isxdigit(*(s+2))) {
-	    c[0] = *(s+1);
-	    c[1] = *(s+2);
-	    c[2] = 0;
-	    *d++ = (char) strtol (c, 0, 16);
-	    s += 3;
-	} else {
-	    *d++ = *s++;
-	}
+        if (*s == '%' && isxdigit(*(s + 1)) && isxdigit(*(s + 2))) {
+            c[0] = *(s + 1);
+            c[1] = *(s + 2);
+            c[2] = 0;
+            *d++ = (char)strtol(c, 0, 16);
+            s += 3;
+        }
+        else {
+            *d++ = *s++;
+        }
     }
     *d = 0;
 }
@@ -201,12 +209,11 @@ unescape_pct_encoding (char* s)
  * and now http://username:password@server:4480
  */
 static error_code
-http_parse_url(const char *url, URLINFO *urlinfo)
-{ 
+http_parse_url(const char* url, URLINFO* urlinfo) {
 #if defined(SR_MODERN_WINDOWS) || defined(SR_CMAKE_POSIX)
-    GError *error = NULL;
-    char *absolute = strstr(url, "://") ? g_strdup(url) : g_strconcat("http://", url, NULL);
-    GUri *uri = g_uri_parse(absolute, G_URI_FLAGS_ENCODED | G_URI_FLAGS_HAS_PASSWORD, &error);
+    GError* error = NULL;
+    char* absolute = strstr(url, "://") ? g_strdup(url) : g_strconcat("http://", url, NULL);
+    GUri* uri = g_uri_parse(absolute, G_URI_FLAGS_ENCODED | G_URI_FLAGS_HAS_PASSWORD, &error);
     const char *scheme, *host, *path, *query, *user, *password;
     int port;
     g_free(absolute);
@@ -223,7 +230,8 @@ http_parse_url(const char *url, URLINFO *urlinfo)
     }
     memset(urlinfo, 0, sizeof(*urlinfo));
     port = g_uri_get_port(uri);
-    if (port < 0) port = g_ascii_strcasecmp(scheme, "https") == 0 ? 443 : 80;
+    if (port < 0)
+        port = g_ascii_strcasecmp(scheme, "https") == 0 ? 443 : 80;
     if (port < 1 || port > 65535 || strlen(host) >= sizeof(urlinfo->host)) {
         g_uri_unref(uri);
         return SR_ERROR_INVALID_URL;
@@ -239,62 +247,71 @@ http_parse_url(const char *url, URLINFO *urlinfo)
     }
     user = g_uri_get_user(uri);
     password = g_uri_get_password(uri);
-    if (user) g_strlcpy(urlinfo->username, user, sizeof(urlinfo->username));
-    if (password) g_strlcpy(urlinfo->password, password, sizeof(urlinfo->password));
+    if (user)
+        g_strlcpy(urlinfo->username, user, sizeof(urlinfo->username));
+    if (password)
+        g_strlcpy(urlinfo->password, password, sizeof(urlinfo->password));
     unescape_pct_encoding(urlinfo->username);
     unescape_pct_encoding(urlinfo->password);
     g_uri_unref(uri);
     return SR_SUCCESS;
 #else
     int ret;
-    char *s;
+    char* s;
     int default_port = g_ascii_strncasecmp(url, "https://", 8) == 0 ? 443 : 80;
 
 
-    debug_printf ("http_parse_url: %s\n", url);
+    debug_printf("http_parse_url: %s\n", url);
 
-    /* if we have a proto, just skip it. should we care about 
+    /* if we have a proto, just skip it. should we care about
        the proto? like fail if it's not http? */
     s = strstr(url, "://");
     if (s && g_ascii_strncasecmp(url, "http://", 7) != 0 &&
-        g_ascii_strncasecmp(url, "https://", 8) != 0) return SR_ERROR_INVALID_URL;
-    if (s) url = s + strlen("://");
-    memcpy(urlinfo->path, (void *)"/\0", 2);
+        g_ascii_strncasecmp(url, "https://", 8) != 0)
+        return SR_ERROR_INVALID_URL;
+    if (s)
+        url = s + strlen("://");
+    memcpy(urlinfo->path, (void*)"/\0", 2);
 
     /* search for a login '@' token */
     if (strchr(url, '@') != NULL) {
-	ret = sscanf(url, "%1023[^:]:%1023[^@]", 
-		     urlinfo->username, urlinfo->password);
-	if (ret < 1) {
-	    return SR_ERROR_PARSE_FAILURE;
-	} else if (ret == 1) {
-	    urlinfo->password[0] = '\0';
-	}
-	url = strchr(url, '@') + 1;
-	debug_printf ("Username (escaped): %s\n", urlinfo->username);
-	debug_printf ("Password (escaped): %s\n", urlinfo->password);
-	unescape_pct_encoding (urlinfo->username);
-	unescape_pct_encoding (urlinfo->password);
-	debug_printf ("Username (unescaped): %s\n", urlinfo->username);
-	debug_printf ("Password (unescaped): %s\n", urlinfo->password);
-    } else {
-	urlinfo->username[0] = '\0';
-	urlinfo->password[0] = '\0';
+        ret = sscanf(url, "%1023[^:]:%1023[^@]",
+                     urlinfo->username, urlinfo->password);
+        if (ret < 1) {
+            return SR_ERROR_PARSE_FAILURE;
+        }
+        else if (ret == 1) {
+            urlinfo->password[0] = '\0';
+        }
+        url = strchr(url, '@') + 1;
+        debug_printf("Username (escaped): %s\n", urlinfo->username);
+        debug_printf("Password (escaped): %s\n", urlinfo->password);
+        unescape_pct_encoding(urlinfo->username);
+        unescape_pct_encoding(urlinfo->password);
+        debug_printf("Username (unescaped): %s\n", urlinfo->username);
+        debug_printf("Password (unescaped): %s\n", urlinfo->password);
+    }
+    else {
+        urlinfo->username[0] = '\0';
+        urlinfo->password[0] = '\0';
     }
 
     /* search for a port seperator */
     if (strchr(url, ':') != NULL) {
-	debug_printf ("Branch 1 (%s)\n", url);
-	ret = sscanf(url, "%511[^:]:%hu/%252s", urlinfo->host, 
-		     (short unsigned int*)&urlinfo->port, urlinfo->path+1);
-	if (urlinfo->port < 1) return SR_ERROR_PARSE_FAILURE;
-	ret -= 1;
-    } else {
-	debug_printf ("Branch 2 (%s)\n", url);
-	urlinfo->port = default_port;
-	ret = sscanf(url, "%511[^/]/%252s", urlinfo->host, urlinfo->path+1);
+        debug_printf("Branch 1 (%s)\n", url);
+        ret = sscanf(url, "%511[^:]:%hu/%252s", urlinfo->host,
+                     (short unsigned int*)&urlinfo->port, urlinfo->path + 1);
+        if (urlinfo->port < 1)
+            return SR_ERROR_PARSE_FAILURE;
+        ret -= 1;
     }
-    if (ret < 1) return SR_ERROR_INVALID_URL;
+    else {
+        debug_printf("Branch 2 (%s)\n", url);
+        urlinfo->port = default_port;
+        ret = sscanf(url, "%511[^/]/%252s", urlinfo->host, urlinfo->path + 1);
+    }
+    if (ret < 1)
+        return SR_ERROR_INVALID_URL;
 
     return SR_SUCCESS;
 #endif
@@ -302,31 +319,31 @@ http_parse_url(const char *url, URLINFO *urlinfo)
 
 /* A zone identifies a local interface, not the remote HTTP authority. */
 static int
-format_authority(char *authority, size_t size, const URLINFO *ui)
-{
+format_authority(char* authority, size_t size, const URLINFO* ui) {
     char host[MAX_HOST_LEN];
-    char *zone;
+    char* zone;
     int ipv6 = strchr(ui->host, ':') != NULL;
     g_strlcpy(host, ui->host, sizeof(host));
-    if (ipv6 && (zone = strchr(host, '%')) != NULL) *zone = 0;
+    if (ipv6 && (zone = strchr(host, '%')) != NULL)
+        *zone = 0;
     return g_snprintf(authority, size, ipv6 ? "[%s]:%d" : "%s:%d", host, ui->port);
 }
 
 static error_code
-http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
-                   const URLINFO *target, const URLINFO *proxy, const char *useragent)
-{
+http_proxy_connect(RIP_MANAGER_INFO* rmi, HSOCKET* sock,
+                   const URLINFO* target, const URLINFO* proxy, const char* useragent) {
     char authority[MAX_HOST_LEN + 10], header[MAX_HEADER_LEN];
-    GString *request;
+    GString* request;
     error_code rc;
     int length = format_authority(authority, sizeof(authority), target);
     gint64 deadline;
-    if (length < 0 || length >= sizeof(authority)) return SR_ERROR_INVALID_URL;
+    if (length < 0 || length >= sizeof(authority))
+        return SR_ERROR_INVALID_URL;
     request = g_string_new(NULL);
     g_string_append_printf(request, "CONNECT %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\n",
                            authority, authority, useragent && *useragent ? useragent : "Streamripper/1.x");
     if (proxy->username[0]) {
-        char *auth = make_auth_header("Proxy-Authorization", proxy->username, proxy->password);
+        char* auth = make_auth_header("Proxy-Authorization", proxy->username, proxy->password);
         g_string_append(request, auth);
         g_free(auth);
     }
@@ -337,7 +354,8 @@ http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
     }
     rc = socklib_sendall(sock, request->str, (int)request->len);
     g_string_free(request, TRUE);
-    if (rc < 0) return rc;
+    if (rc < 0)
+        return rc;
 
     deadline = g_get_monotonic_time() +
         (gint64)(rmi->prefs->timeout > 0 ? rmi->prefs->timeout : 15) * G_USEC_PER_SEC;
@@ -347,138 +365,151 @@ http_proxy_connect(RIP_MANAGER_INFO *rmi, HSOCKET *sock,
            Content-Length/Transfer-Encoding must not consume tunnel bytes. */
         while (used < sizeof(header) - 1) {
             gint64 remaining = deadline - g_get_monotonic_time();
-            if (remaining <= 0) return SR_ERROR_TIMEOUT;
+            if (remaining <= 0)
+                return SR_ERROR_TIMEOUT;
             rc = socklib_recvall(rmi, sock, header + used, 1,
-                                (int)((remaining + G_USEC_PER_SEC - 1) / G_USEC_PER_SEC));
-            if (rc < 0) return rc;
-            if (!rc || !header[used]) return SR_ERROR_NO_HTTP_HEADER;
+                                 (int)((remaining + G_USEC_PER_SEC - 1) / G_USEC_PER_SEC));
+            if (rc < 0)
+                return rc;
+            if (!rc || !header[used])
+                return SR_ERROR_NO_HTTP_HEADER;
             used++;
-            if (used >= 4 && !memcmp(header + used - 4, "\r\n\r\n", 4)) break;
+            if (used >= 4 && !memcmp(header + used - 4, "\r\n\r\n", 4))
+                break;
         }
         header[used] = 0;
-        if (used == sizeof(header) - 1) return SR_ERROR_NO_HTTP_HEADER;
+        if (used == sizeof(header) - 1)
+            return SR_ERROR_NO_HTTP_HEADER;
         if (used < 14 || (strncmp(header, "HTTP/1.0 ", 9) && strncmp(header, "HTTP/1.1 ", 9)) ||
             !g_ascii_isdigit(header[9]) || !g_ascii_isdigit(header[10]) || !g_ascii_isdigit(header[11]) ||
             (header[12] != ' ' && !(header[12] == '\r' && header[13] == '\n')))
             return SR_ERROR_NO_RESPONSE_HEADER;
         status = (header[9] - '0') * 100 + (header[10] - '0') * 10 + header[11] - '0';
-        if (status >= 200 && status < 300) return SR_SUCCESS;
-        if (status >= 100 && status < 200 && status != 101) continue;
+        if (status >= 200 && status < 300)
+            return SR_SUCCESS;
+        if (status >= 100 && status < 200 && status != 101)
+            continue;
         fprintf(stderr, "Proxy CONNECT failed (HTTP %d).\n", status);
         rmi->retry_after_seconds = retry_after_delay(header);
         if (status == 408 || status == 429 || (status >= 500 && status != 502))
             return SR_ERROR_HTTP_RETRY;
         switch (status) {
-        case 403: return SR_ERROR_HTTP_403_ERROR;
-        case 407: return SR_ERROR_HTTP_407_ERROR;
-        case 502: return SR_ERROR_HTTP_502_ERROR;
-        default: return SR_ERROR_NO_RESPONSE_HEADER;
+        case 403:
+            return SR_ERROR_HTTP_403_ERROR;
+        case 407:
+            return SR_ERROR_HTTP_407_ERROR;
+        case 502:
+            return SR_ERROR_HTTP_502_ERROR;
+        default:
+            return SR_ERROR_NO_RESPONSE_HEADER;
         }
     }
     return SR_ERROR_NO_RESPONSE_HEADER;
 }
 
 error_code
-http_construct_sc_request(const char *url, const char* proxyurl, char *buffer, char *useragent)
-{
+http_construct_sc_request(const char* url, const char* proxyurl, char* buffer, char* useragent) {
     int ret;
     URLINFO ui;
     URLINFO proxyui;
     char myurl[MAX_URL_LEN];
     char authority[MAX_HOST_LEN + 10];
     if ((ret = http_parse_url(url, &ui)) != SR_SUCCESS)
-	return ret;
+        return ret;
 
     ret = format_authority(authority, sizeof(authority), &ui);
-    if (ret < 0 || ret >= sizeof(authority)) return SR_ERROR_INVALID_URL;
+    if (ret < 0 || ret >= sizeof(authority))
+        return SR_ERROR_INVALID_URL;
 
     if (proxyurl) {
-	if (g_snprintf(myurl, sizeof(myurl), "http://%s%s", authority, ui.path) >= sizeof(myurl))
+        if (g_snprintf(myurl, sizeof(myurl), "http://%s%s", authority, ui.path) >= sizeof(myurl))
             return SR_ERROR_INVALID_URL;
-	if ((ret = http_parse_url(proxyurl, &proxyui)) != SR_SUCCESS)
-	    return ret;
-    } else {
-	strcpy(myurl, ui.path);
+        if ((ret = http_parse_url(proxyurl, &proxyui)) != SR_SUCCESS)
+            return ret;
+    }
+    else {
+        strcpy(myurl, ui.path);
     }
 
 #if defined (commentout)
     /* This is the old header */
     snprintf(buffer, MAX_HEADER_LEN,
-	     "GET %s HTTP/1.0\r\n"
-	     "Host: %s:%d\r\n"
-	     "User-Agent: %s\r\n"
-	     "Icy-MetaData:1\r\n", 
-	     myurl, 
-	     ui.host, 
-	     ui.port, 
-	     useragent[0] ? useragent : "Streamripper/1.x");
+             "GET %s HTTP/1.0\r\n"
+             "Host: %s:%d\r\n"
+             "User-Agent: %s\r\n"
+             "Icy-MetaData:1\r\n",
+             myurl,
+             ui.host,
+             ui.port,
+             useragent[0] ? useragent : "Streamripper/1.x");
 #endif
 
     /* This is the header suggested Florian Stoehr */
     ret = snprintf(buffer, MAX_HEADER_LEN,
-	     "GET %s HTTP/1.1\r\n"
-	     "Accept: */*\r\n"
-	     "Cache-Control: no-cache\r\n"
-	     "User-Agent: %s\r\n"
-	     "Icy-Metadata: 1\r\n"
-	     "Connection: close\r\n"
-	     "Host: %s\r\n",
-	     myurl,
-	     useragent[0] ? useragent: "Streamripper/1.x",
-	     authority);
-    if (ret < 0 || ret >= MAX_HEADER_LEN) return SR_ERROR_INVALID_URL;
+                   "GET %s HTTP/1.1\r\n"
+                   "Accept: */*\r\n"
+                   "Cache-Control: no-cache\r\n"
+                   "User-Agent: %s\r\n"
+                   "Icy-Metadata: 1\r\n"
+                   "Connection: close\r\n"
+                   "Host: %s\r\n",
+                   myurl,
+                   useragent[0] ? useragent : "Streamripper/1.x",
+                   authority);
+    if (ret < 0 || ret >= MAX_HEADER_LEN)
+        return SR_ERROR_INVALID_URL;
 
     // http authentication (not proxy, see below for that)
     if (ui.username[0] && ui.password[0]) {
-	char *authbuf = make_auth_header("Authorization", 
-					 ui.username,
-					 ui.password);
-	if (g_strlcat(buffer, authbuf, MAX_HEADER_LEN) >= MAX_HEADER_LEN) {
+        char* authbuf = make_auth_header("Authorization",
+                                         ui.username,
+                                         ui.password);
+        if (g_strlcat(buffer, authbuf, MAX_HEADER_LEN) >= MAX_HEADER_LEN) {
             free(authbuf);
             return SR_ERROR_INVALID_URL;
         }
-	free(authbuf);
+        free(authbuf);
     }
 
 #if defined (commentout)
     // proxy auth stuff
     if (proxyurl && proxyui.username[0] && proxyui.password[0]) {
-	char *authbuf = make_auth_header("Proxy-Authorization",
-					 proxyui.username,
-					 proxyui.password);
-	strcat(buffer, authbuf);
-	free(authbuf);
+        char* authbuf = make_auth_header("Proxy-Authorization",
+                                         proxyui.username,
+                                         proxyui.password);
+        strcat(buffer, authbuf);
+        free(authbuf);
     }
 #endif
     /* GCS Testing... Proxy authentication w/o password bug */
     if (proxyurl && proxyui.username[0]) {
-	char *authbuf = make_auth_header("Proxy-Authorization",
-					 proxyui.username,
-					 proxyui.password);
-	if (g_strlcat(buffer, authbuf, MAX_HEADER_LEN) >= MAX_HEADER_LEN) {
+        char* authbuf = make_auth_header("Proxy-Authorization",
+                                         proxyui.username,
+                                         proxyui.password);
+        if (g_strlcat(buffer, authbuf, MAX_HEADER_LEN) >= MAX_HEADER_LEN) {
             free(authbuf);
             return SR_ERROR_INVALID_URL;
         }
-	free(authbuf);
+        free(authbuf);
     }
 
-    
-    if (g_strlcat(buffer, "\r\n", MAX_HEADER_LEN) >= MAX_HEADER_LEN) return SR_ERROR_INVALID_URL;
 
-    debug_printf ("SC REQUEST:\n%s", buffer);
+    if (g_strlcat(buffer, "\r\n", MAX_HEADER_LEN) >= MAX_HEADER_LEN)
+        return SR_ERROR_INVALID_URL;
+
+    debug_printf("SC REQUEST:\n%s", buffer);
 
     return SR_SUCCESS;
 }
 
-// Make the 'Authorization: Basic xxxxxx\r\n' or 'Proxy-Authorization...' 
+// Make the 'Authorization: Basic xxxxxx\r\n' or 'Proxy-Authorization...'
 // headers for the HTTP request.
 static char*
-make_auth_header (const char *header_name, const char *username, 
-		  const char *password) 
-{
-    char *plain = g_strdup_printf("%s:%s", username, password);
-    char *auth64 = g_base64_encode((const guchar *)plain, strlen(plain));
-    char *authbuf = g_strdup_printf("%s: Basic %s\r\n", header_name, auth64);
+make_auth_header(const char* header_name, const char* username,
+                 const char* password) {
+    char* plain = g_strdup_printf("%s:%s", username, password);
+    char* auth64 = g_base64_encode((const guchar*)plain, strlen(plain));
+    char* authbuf = g_strdup_printf("%s: Basic %s\r\n", header_name, auth64);
     g_free(plain);
     g_free(auth64);
     return authbuf;
@@ -486,74 +517,79 @@ make_auth_header (const char *header_name, const char *username,
 
 /* Browser identification for the legacy page-request helper. */
 error_code
-http_construct_page_request (const char *url, BOOL proxyformat, char *buffer)
-{
+http_construct_page_request(const char* url, BOOL proxyformat, char* buffer) {
     int ret;
     URLINFO ui;
     char myurl[MAX_URL_LEN];
     char authority[MAX_HOST_LEN + 10];
-    if ((ret = http_parse_url(url, &ui)) != SR_SUCCESS) return ret;
+    if ((ret = http_parse_url(url, &ui)) != SR_SUCCESS)
+        return ret;
     ret = format_authority(authority, sizeof(authority), &ui);
-    if (ret < 0 || ret >= sizeof(authority)) return SR_ERROR_INVALID_URL;
+    if (ret < 0 || ret >= sizeof(authority))
+        return SR_ERROR_INVALID_URL;
     if (g_snprintf(myurl, sizeof(myurl), "%s%s%s", proxyformat ? "http://" : "",
                    proxyformat ? authority : "", ui.path) >= sizeof(myurl))
         return SR_ERROR_INVALID_URL;
 
     ret = snprintf(buffer, MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH,
-                "GET %s HTTP/1.1\r\n"
-                "Host: %s\r\n"
-                "Accept: */*\r\n"
-                "Accept-Language: en-us\r\n"
-                "Accept-Encoding: identity\r\n"
-                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36\r\n"
-                "Connection: close\r\n\r\n",
-                myurl, authority);
+                   "GET %s HTTP/1.1\r\n"
+                   "Host: %s\r\n"
+                   "Accept: */*\r\n"
+                   "Accept-Language: en-us\r\n"
+                   "Accept-Encoding: identity\r\n"
+                   "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36\r\n"
+                   "Connection: close\r\n\r\n",
+                   myurl, authority);
     return ret < 0 || ret >= MAX_HEADER_LEN + MAX_HOST_LEN + SR_MAX_PATH
-        ? SR_ERROR_INVALID_URL : SR_SUCCESS;
+        ? SR_ERROR_INVALID_URL
+        : SR_SUCCESS;
 }
 
 /* Return 1 if a match was found, 0 if not found */
 int
-extract_header_value (char *header, char *dest, char *match, int maxlen)
-{
-    char *start = header;
+extract_header_value(char* header, char* dest, char* match, int maxlen) {
+    char* start = header;
     size_t len = strlen(match);
-    if (maxlen < 1) return 0;
+    if (maxlen < 1)
+        return 0;
     dest[0] = 0;
     while (*start) {
-        char *end = strchr(start, '\n');
+        char* end = strchr(start, '\n');
         size_t line_len = end ? (size_t)(end - start) : strlen(start);
         if (line_len >= len && !g_ascii_strncasecmp(start, match, len)) {
             size_t value_len = line_len - len;
-            if (value_len >= (size_t)maxlen) value_len = maxlen - 1;
+            if (value_len >= (size_t)maxlen)
+                value_len = maxlen - 1;
             memcpy(dest, start + len, value_len);
             dest[value_len] = 0;
             g_strstrip(dest);
             return 1;
         }
-        if (!end) break;
+        if (!end)
+            break;
         start = end + 1;
     }
     return 0;
 }
 
-static guint64 retry_after_delay(char *header)
-{
+static guint64 retry_after_delay(char* header) {
     char value[128], *end;
     guint64 seconds;
-    if (!extract_header_value(header, value, "Retry-After:", sizeof(value))) return 0;
+    if (!extract_header_value(header, value, "Retry-After:", sizeof(value)))
+        return 0;
     errno = 0;
     seconds = g_ascii_strtoull(value, &end, 10);
-    if (g_ascii_isdigit(value[0]) && !*end && errno != ERANGE) return seconds;
+    if (g_ascii_isdigit(value[0]) && !*end && errno != ERANGE)
+        return seconds;
     {
         char weekday[4], month[4], zone[4];
         int day, year, hour, minute, second;
-        const char *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+        const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
         if (sscanf(value, "%3s, %d %3s %d %d:%d:%d %3s", weekday, &day, month,
                    &year, &hour, &minute, &second, zone) == 8 && !strcmp(zone, "GMT")) {
             for (int i = 0; i < 12; i++) {
                 if (!strncmp(months + i * 3, month, 3)) {
-                    GDateTime *date = g_date_time_new_utc(year, i + 1, day, hour, minute, second);
+                    GDateTime* date = g_date_time_new_utc(year, i + 1, day, hour, minute, second);
                     if (date) {
                         gint64 delta = g_date_time_to_unix(date) - g_get_real_time() / G_USEC_PER_SEC;
                         g_date_time_unref(date);
@@ -567,10 +603,9 @@ static guint64 retry_after_delay(char *header)
 }
 
 error_code
-http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
-{
+http_parse_sc_header(const char* url, char* header, SR_HTTP_HEADER* info) {
     int rc;
-    char *start;
+    char* start;
     char versionbuf[64];
     char stempbr[MAX_ICY_STRING];
     URLINFO url_info;
@@ -578,142 +613,157 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     int content_type_by_url;
 
     if (!header || !info)
-	return SR_ERROR_INVALID_PARAM;
+        return SR_ERROR_INVALID_PARAM;
 
-    /* Parse the url here, before doing memset, because in the 
+    /* Parse the url here, before doing memset, because in the
        recursive case, it is the location referrer */
-    rc = http_parse_url (url, &url_info);
-    if (rc != SR_SUCCESS) return rc;
+    rc = http_parse_url(url, &url_info);
+    if (rc != SR_SUCCESS)
+        return rc;
 
     memset(info, 0, sizeof(SR_HTTP_HEADER));
     info->content_length = -1;
     if (extract_header_value(header, stempbr, "Content-Length:", sizeof(stempbr))) {
-        char *end;
+        char* end;
         info->content_length = g_ascii_strtoll(stempbr, &end, 10);
-        if (*end || info->content_length < 0) return SR_ERROR_NO_RESPONSE_HEADER;
+        if (*end || info->content_length < 0)
+            return SR_ERROR_NO_RESPONSE_HEADER;
     }
 
     debug_printf("http header:\n%s\n", header);
 
     // Get the ICY code.
-    start = (char*) strstr (header, "ICY ");
+    start = (char*)strstr(header, "ICY ");
     if (!start) {
-	start = (char*) strstr (header, "HTTP/1.");
-	if (!start) {
-	    debug_printf ("Failed to find ICY or HTTP\n");
-	    return SR_ERROR_NO_RESPONSE_HEADER;
-	}
+        start = (char*)strstr(header, "HTTP/1.");
+        if (!start) {
+            debug_printf("Failed to find ICY or HTTP\n");
+            return SR_ERROR_NO_RESPONSE_HEADER;
+        }
     }
     start = strchr(start, ' ');
     if (!start || sscanf(start + 1, "%d", &info->icy_code) != 1 ||
-        info->icy_code < 100 || info->icy_code > 599) return SR_ERROR_NO_RESPONSE_HEADER;
+        info->icy_code < 100 || info->icy_code > 599)
+        return SR_ERROR_NO_RESPONSE_HEADER;
     if (info->icy_code >= 400) {
         info->retry_after_seconds = retry_after_delay(header);
         if (info->icy_code == 408 || info->icy_code == 429 ||
-            (info->icy_code >= 500 && info->icy_code != 502)) return SR_ERROR_HTTP_RETRY;
-	switch (info->icy_code) {
-	case 400:
-	    return SR_ERROR_HTTP_400_ERROR;
-	case 404:
-	    return SR_ERROR_HTTP_404_ERROR;
-	case 401:
-	    return SR_ERROR_HTTP_401_ERROR;
-	case 403:
-	    return SR_ERROR_HTTP_403_ERROR;
-	case 407:
-	    return SR_ERROR_HTTP_407_ERROR;
-	case 502:
-	    return SR_ERROR_HTTP_502_ERROR;
-	default:
-	    return SR_ERROR_NO_ICY_CODE;
-	}
+            (info->icy_code >= 500 && info->icy_code != 502))
+            return SR_ERROR_HTTP_RETRY;
+        switch (info->icy_code) {
+        case 400:
+            return SR_ERROR_HTTP_400_ERROR;
+        case 404:
+            return SR_ERROR_HTTP_404_ERROR;
+        case 401:
+            return SR_ERROR_HTTP_401_ERROR;
+        case 403:
+            return SR_ERROR_HTTP_403_ERROR;
+        case 407:
+            return SR_ERROR_HTTP_407_ERROR;
+        case 502:
+            return SR_ERROR_HTTP_502_ERROR;
+        default:
+            return SR_ERROR_NO_ICY_CODE;
+        }
     }
 
     // read generic headers
-    extract_header_value(header, info->http_location, "Location:", 
-	sizeof(info->http_location));
-    extract_header_value(header, info->server, "Server:", 
-	sizeof(info->server));
-    rc = extract_header_value(header, info->icy_name, "icy-name:", 
-	sizeof(info->icy_name));
+    extract_header_value(header, info->http_location, "Location:",
+                         sizeof(info->http_location));
+    extract_header_value(header, info->server, "Server:",
+                         sizeof(info->server));
+    rc = extract_header_value(header, info->icy_name, "icy-name:",
+                              sizeof(info->icy_name));
     if (rc == 0) {
-	/* Icecast 2.0.1 */
-	rc = extract_header_value(header, info->icy_name, "ice-name:", 
-	    sizeof(info->icy_name));
+        /* Icecast 2.0.1 */
+        rc = extract_header_value(header, info->icy_name, "ice-name:",
+                                  sizeof(info->icy_name));
     }
     info->have_icy_name = rc;
-    extract_header_value(header, info->icy_url, "icy-url:", 
-	sizeof(info->icy_url));
-    rc = extract_header_value(header, stempbr, 
-	"icy-br:", sizeof(stempbr));
+    extract_header_value(header, info->icy_url, "icy-url:",
+                         sizeof(info->icy_url));
+    rc = extract_header_value(header, stempbr,
+                              "icy-br:", sizeof(stempbr));
     if (rc) {
-	info->icy_bitrate = atoi(stempbr);
+        info->icy_bitrate = atoi(stempbr);
     }
 
     /* interpret the content type from http header */
-    rc = extract_header_value(header, stempbr, 
-	"Content-Type:", sizeof(stempbr));
-    for (char *mime = stempbr; *mime; mime++) *mime = g_ascii_tolower(*mime);
+    rc = extract_header_value(header, stempbr,
+                              "Content-Type:", sizeof(stempbr));
+    for (char* mime = stempbr; *mime; mime++)
+        *mime = g_ascii_tolower(*mime);
     if (rc == 0) {
-	info->content_type = CONTENT_TYPE_UNKNOWN;
+        info->content_type = CONTENT_TYPE_UNKNOWN;
     }
-    else if (strstr(stempbr,"mpegurl") || strstr(stempbr,"vnd.apple.mpegurl")) {
+    else if (strstr(stempbr, "mpegurl") || strstr(stempbr, "vnd.apple.mpegurl")) {
         info->content_type = CONTENT_TYPE_HLS;
     }
-    else if (strstr(stempbr,"audio/flac") || strstr(stempbr,"audio/x-flac")) {
+    else if (strstr(stempbr, "audio/flac") || strstr(stempbr, "audio/x-flac")) {
         info->content_type = CONTENT_TYPE_FLAC;
     }
-    else if (strstr(stempbr,"audio/mpeg")) {
-	info->content_type = CONTENT_TYPE_MP3;
+    else if (strstr(stempbr, "audio/mpeg")) {
+        info->content_type = CONTENT_TYPE_MP3;
     }
-    else if (strstr(stempbr,"video/nsv")) {
-	info->content_type = CONTENT_TYPE_NSV;
+    else if (strstr(stempbr, "video/nsv")) {
+        info->content_type = CONTENT_TYPE_NSV;
     }
-    else if (strstr(stempbr,"misc/ultravox")) {
-	info->content_type = CONTENT_TYPE_ULTRAVOX;
+    else if (strstr(stempbr, "misc/ultravox")) {
+        info->content_type = CONTENT_TYPE_ULTRAVOX;
     }
-    else if (strstr(stempbr,"application/ogg") || strstr(stempbr,"audio/ogg")) {
-	info->content_type = CONTENT_TYPE_OGG;
+    else if (strstr(stempbr, "application/ogg") || strstr(stempbr, "audio/ogg")) {
+        info->content_type = CONTENT_TYPE_OGG;
     }
-    else if (strstr(stempbr,"audio/aac")) {
-	info->content_type = CONTENT_TYPE_AAC;
+    else if (strstr(stempbr, "audio/aac")) {
+        info->content_type = CONTENT_TYPE_AAC;
     }
-    else if (strstr(stempbr,"audio/x-scpls")) {
-	info->content_type = CONTENT_TYPE_PLS;
+    else if (strstr(stempbr, "audio/x-scpls")) {
+        info->content_type = CONTENT_TYPE_PLS;
     }
-    else if (strstr(stempbr,"text/html")) {
-	if (!info->http_location[0]) {
-	    return SR_ERROR_NO_RESPONSE_HEADER;
-	}
+    else if (strstr(stempbr, "text/html")) {
+        if (!info->http_location[0]) {
+            return SR_ERROR_NO_RESPONSE_HEADER;
+        }
     }
     else {
-	info->content_type = CONTENT_TYPE_UNKNOWN;
+        info->content_type = CONTENT_TYPE_UNKNOWN;
     }
 
     /* Look at url for more content type hints */
     url_path_len = strlen(url_info.path);
     content_type_by_url = CONTENT_TYPE_UNKNOWN;
-    char *path_end = strpbrk(url_info.path, "?#");
-    if (path_end) *path_end = '\0';
+    char* path_end = strpbrk(url_info.path, "?#");
+    if (path_end)
+        *path_end = '\0';
     url_path_len = strlen(url_info.path);
-    if (g_str_has_suffix(url_info.path, ".m3u8")) content_type_by_url = CONTENT_TYPE_HLS;
-    else if (g_str_has_suffix(url_info.path, ".flac")) content_type_by_url = CONTENT_TYPE_FLAC;
+    if (g_str_has_suffix(url_info.path, ".m3u8"))
+        content_type_by_url = CONTENT_TYPE_HLS;
+    else
+        if (g_str_has_suffix(url_info.path, ".flac"))
+            content_type_by_url = CONTENT_TYPE_FLAC;
     if (url_path_len >= 4) {
-	if (!strcmp (&url_info.path[url_path_len-4], ".aac")) {
-	    content_type_by_url = CONTENT_TYPE_AAC;
-	} else if (!strcmp (&url_info.path[url_path_len-4], ".ogg")) {
-	    content_type_by_url = CONTENT_TYPE_OGG;
-	} else if (!strcmp (&url_info.path[url_path_len-4], ".oga")) {
-	    content_type_by_url = CONTENT_TYPE_OGG;
-	} else if (!strcmp (&url_info.path[url_path_len-4], ".mp3")) {
-	    content_type_by_url = CONTENT_TYPE_MP3;
-	} else if (!strcmp (&url_info.path[url_path_len-4], ".nsv")) {
-	    content_type_by_url = CONTENT_TYPE_NSV;
-	} else if (!strcmp (&url_info.path[url_path_len-4], ".pls")) {
-	    content_type_by_url = CONTENT_TYPE_PLS;
-	} else if (!strcmp (&url_info.path[url_path_len-4], ".m3u")) {
-	    content_type_by_url = CONTENT_TYPE_M3U;
-	}
+        if (!strcmp(&url_info.path[url_path_len - 4], ".aac")) {
+            content_type_by_url = CONTENT_TYPE_AAC;
+        }
+        else if (!strcmp(&url_info.path[url_path_len - 4], ".ogg")) {
+            content_type_by_url = CONTENT_TYPE_OGG;
+        }
+        else if (!strcmp(&url_info.path[url_path_len - 4], ".oga")) {
+            content_type_by_url = CONTENT_TYPE_OGG;
+        }
+        else if (!strcmp(&url_info.path[url_path_len - 4], ".mp3")) {
+            content_type_by_url = CONTENT_TYPE_MP3;
+        }
+        else if (!strcmp(&url_info.path[url_path_len - 4], ".nsv")) {
+            content_type_by_url = CONTENT_TYPE_NSV;
+        }
+        else if (!strcmp(&url_info.path[url_path_len - 4], ".pls")) {
+            content_type_by_url = CONTENT_TYPE_PLS;
+        }
+        else if (!strcmp(&url_info.path[url_path_len - 4], ".m3u")) {
+            content_type_by_url = CONTENT_TYPE_M3U;
+        }
     }
 
     /* Traditional .m3u station lists also use mpegurl MIME types. */
@@ -723,83 +773,83 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     // Try to guess the server
 
     // Check for Streamripper relay
-    if ((start = (char *)strstr(header, "[relay stream]")) != NULL) {
-	strcpy(info->server, "Streamripper relay server");
+    if ((start = (char*)strstr(header, "[relay stream]")) != NULL) {
+        strcpy(info->server, "Streamripper relay server");
     }
     // Check for Shoutcast
-    else if ((start = (char *)strstr(header, "SHOUTcast")) != NULL) {
-	strcpy(info->server, "SHOUTcast/");
-	if ((start = (char *)strstr(start, "Server/")) != NULL) {
-	    sscanf(start, "Server/%63[^<]<", versionbuf);
-	    strcat(info->server, versionbuf);
-	}
-
+    else if ((start = (char*)strstr(header, "SHOUTcast")) != NULL) {
+        strcpy(info->server, "SHOUTcast/");
+        if ((start = (char*)strstr(start, "Server/")) != NULL) {
+            sscanf(start, "Server/%63[^<]<", versionbuf);
+            strcat(info->server, versionbuf);
+        }
     }
     // Check for Icecast 2
-    else if ((start = (char *)strstr(header, "Icecast 2")) != NULL) {
-	/* aac on icecast 2.0-2.1 declares content type of audio/mpeg */
-	/* In addition, there is at least one stream with a url 
-	   radioorenovscotia.ogg, but is actually audio/mpeg */
-	if (info->content_type == CONTENT_TYPE_MP3 
-	    && content_type_by_url != CONTENT_TYPE_UNKNOWN
-	    && content_type_by_url != CONTENT_TYPE_OGG) {
-	    info->content_type = content_type_by_url;
-	}
+    else if ((start = (char*)strstr(header, "Icecast 2")) != NULL) {
+        /* aac on icecast 2.0-2.1 declares content type of audio/mpeg */
+        /* In addition, there is at least one stream with a url
+           radioorenovscotia.ogg, but is actually audio/mpeg */
+        if (info->content_type == CONTENT_TYPE_MP3
+            && content_type_by_url != CONTENT_TYPE_UNKNOWN
+            && content_type_by_url != CONTENT_TYPE_OGG) {
+            info->content_type = content_type_by_url;
+        }
     }
 
     // Check for Icecast 1
-    else if ((start = (char *)strstr(header, "icecast")) != NULL) {
-	if (!info->server[0]) {
-	    strcpy(info->server, "icecast/");
-	    if ((start = (char *)strstr(start, "version ")) != NULL) {
-		sscanf(start, "version %63[^<]<", versionbuf);
-		strcat(info->server, versionbuf);
-	    }
-	}
+    else if ((start = (char*)strstr(header, "icecast")) != NULL) {
+        if (!info->server[0]) {
+            strcpy(info->server, "icecast/");
+            if ((start = (char*)strstr(start, "version ")) != NULL) {
+                sscanf(start, "version %63[^<]<", versionbuf);
+                strcat(info->server, versionbuf);
+            }
+        }
 
-	// icecast 1.x headers.
-	extract_header_value(header, info->icy_url, "x-audiocast-server-url:",
-	    sizeof(info->icy_url));
-	rc = extract_header_value(header, info->icy_name, "x-audiocast-name:",
-	    sizeof(info->icy_name));
-	info->have_icy_name |= rc;
-	extract_header_value(header, info->icy_genre, "x-audiocast-genre:",
-	    sizeof(info->icy_genre));
-	rc = extract_header_value(header, stempbr, "x-audiocast-bitrate:",
-	    sizeof(stempbr));
-	if (rc) {
-	    info->icy_bitrate = atoi(stempbr);
-	}
+        // icecast 1.x headers.
+        extract_header_value(header, info->icy_url, "x-audiocast-server-url:",
+                             sizeof(info->icy_url));
+        rc = extract_header_value(header, info->icy_name, "x-audiocast-name:",
+                                  sizeof(info->icy_name));
+        info->have_icy_name |= rc;
+        extract_header_value(header, info->icy_genre, "x-audiocast-genre:",
+                             sizeof(info->icy_genre));
+        rc = extract_header_value(header, stempbr, "x-audiocast-bitrate:",
+                                  sizeof(stempbr));
+        if (rc) {
+            info->icy_bitrate = atoi(stempbr);
+        }
     }
 
     // Check for Apache
-    else if (((start = (char *)strstr(header, "Apache")) != NULL) &&
-	((start = (char *)strstr(header, "x-audiocast-name")) != NULL)) {
-	// Streaming straight from apache with audiocast headers
-	extract_header_value(header, info->icy_url, "x-audiocast-server-url:",
-	    sizeof(info->icy_url));
-	rc = extract_header_value(header, info->icy_name, "x-audiocast-name:",
-	    sizeof(info->icy_name));
-	info->have_icy_name |= rc;
-	extract_header_value(header, info->icy_genre, "x-audiocast-genre:",
-	    sizeof(info->icy_genre));
-	rc = extract_header_value(header, stempbr, "x-audiocast-bitrate:",
-	    sizeof(stempbr));
-	if (rc) {
-	    info->icy_bitrate = atoi(stempbr);
-	}
+    else if (((start = (char*)strstr(header, "Apache")) != NULL) &&
+        ((start = (char*)strstr(header, "x-audiocast-name")) != NULL)) {
+        // Streaming straight from apache with audiocast headers
+        extract_header_value(header, info->icy_url, "x-audiocast-server-url:",
+                             sizeof(info->icy_url));
+        rc = extract_header_value(header, info->icy_name, "x-audiocast-name:",
+                                  sizeof(info->icy_name));
+        info->have_icy_name |= rc;
+        extract_header_value(header, info->icy_genre, "x-audiocast-genre:",
+                             sizeof(info->icy_genre));
+        rc = extract_header_value(header, stempbr, "x-audiocast-bitrate:",
+                                  sizeof(stempbr));
+        if (rc) {
+            info->icy_bitrate = atoi(stempbr);
+        }
     }
 
     /* Last chance to deduce content type */
     if (info->content_type == CONTENT_TYPE_UNKNOWN) {
-	if (content_type_by_url == CONTENT_TYPE_UNKNOWN) {
-	    info->content_type = CONTENT_TYPE_MP3;
-	} else {
-	    info->content_type = content_type_by_url;
-	}
+        if (content_type_by_url == CONTENT_TYPE_UNKNOWN) {
+            info->content_type = CONTENT_TYPE_MP3;
+        }
+        else {
+            info->content_type = content_type_by_url;
+        }
     }
 
-    debug_printf ("Deduced content type: %d\n", info->content_type);
+    debug_printf("Deduced content type: %d\n", info->content_type);
 
     // Make sure we don't have any CRLF's at the end of our strings
     trim(info->icy_url);
@@ -809,43 +859,59 @@ http_parse_sc_header (const char *url, char *header, SR_HTTP_HEADER *info)
     trim(info->server);
 
     //get the meta interval
-    start = (char*) strstr (header, "icy-metaint:");
+    start = (char*)strstr(header, "icy-metaint:");
     if (start) {
-        sscanf (start, "icy-metaint:%i", &info->meta_interval);
+        sscanf(start, "icy-metaint:%i", &info->meta_interval);
         if (info->meta_interval < 1) {
-	    info->meta_interval = NO_META_INTERVAL;
+            info->meta_interval = NO_META_INTERVAL;
         }
-    } else {
+    }
+    else {
         info->meta_interval = NO_META_INTERVAL;
     }
 
     return SR_SUCCESS;
 }
 
-/* Constructs a HTTP response header from the SR_HTTP_HEADER struct, 
+/* Constructs a HTTP response header from the SR_HTTP_HEADER struct,
  * if data is null it is not added to the header
  */
 error_code
-http_construct_sc_response(SR_HTTP_HEADER *info, char *header, int size, int icy_meta_support)
-{
-    GString *response;
-    const char *type = "audio/mpeg";
-    if (!info || !header || size < 1) return SR_ERROR_INVALID_PARAM;
+http_construct_sc_response(SR_HTTP_HEADER* info, char* header, int size, int icy_meta_support) {
+    GString* response;
+    const char* type = "audio/mpeg";
+    if (!info || !header || size < 1)
+        return SR_ERROR_INVALID_PARAM;
     response = g_string_new("ICY 200 OK\r\n");
-    if (info->http_location[0]) g_string_append_printf(response, "Location:%s\r\n", info->http_location);
-    if (info->server[0]) g_string_append_printf(response, "Server:%s\r\n", info->server);
-    if (info->have_icy_name) g_string_append_printf(response, "icy-name:%s\r\n", info->icy_name);
-    if (info->icy_url[0]) g_string_append_printf(response, "icy-url:%s\r\n", info->icy_url);
-    if (info->icy_bitrate) g_string_append_printf(response, "icy-br:%d\r\n", info->icy_bitrate);
-    if (info->icy_genre[0]) g_string_append_printf(response, "icy-genre:%s\r\n", info->icy_genre);
+    if (info->http_location[0])
+        g_string_append_printf(response, "Location:%s\r\n", info->http_location);
+    if (info->server[0])
+        g_string_append_printf(response, "Server:%s\r\n", info->server);
+    if (info->have_icy_name)
+        g_string_append_printf(response, "icy-name:%s\r\n", info->icy_name);
+    if (info->icy_url[0])
+        g_string_append_printf(response, "icy-url:%s\r\n", info->icy_url);
+    if (info->icy_bitrate)
+        g_string_append_printf(response, "icy-br:%d\r\n", info->icy_bitrate);
+    if (info->icy_genre[0])
+        g_string_append_printf(response, "icy-genre:%s\r\n", info->icy_genre);
     if (info->meta_interval > 0 && icy_meta_support)
         g_string_append_printf(response, "icy-metaint:%d\r\n", info->meta_interval);
     switch (info->content_type) {
-    case CONTENT_TYPE_OGG: type = "application/ogg"; break;
-    case CONTENT_TYPE_AAC: type = "audio/aac"; break;
-    case CONTENT_TYPE_NSV: type = "video/nsv"; break;
-    case CONTENT_TYPE_ULTRAVOX: type = "misc/ultravox"; break;
-    default: break;
+    case CONTENT_TYPE_OGG:
+        type = "application/ogg";
+        break;
+    case CONTENT_TYPE_AAC:
+        type = "audio/aac";
+        break;
+    case CONTENT_TYPE_NSV:
+        type = "video/nsv";
+        break;
+    case CONTENT_TYPE_ULTRAVOX:
+        type = "misc/ultravox";
+        break;
+    default:
+        break;
     }
     g_string_append_printf(response, "Content-Type: %s\r\n\r\n", type);
     if (response->len >= (size_t)size) {
@@ -867,70 +933,70 @@ Length1=-1
 Version=2
 */
 static error_code
-http_get_pls (RIP_MANAGER_INFO* rmi, HSOCKET *sock, SR_HTTP_HEADER *info)
-{
+http_get_pls(RIP_MANAGER_INFO* rmi, HSOCKET* sock, SR_HTTP_HEADER* info) {
     int s, bytes;
     error_code rc;
     char buf[MAX_PLS_LEN];
     char location_buf[MAX_PLS_LEN];
     char title_buf[MAX_PLS_LEN];
 
-    debug_printf ("Reading pls\n");
-    bytes = socklib_recvall (rmi, sock, buf, MAX_PLS_LEN, rmi->prefs->timeout);
-    if (bytes < SR_SUCCESS) return bytes;
+    debug_printf("Reading pls\n");
+    bytes = socklib_recvall(rmi, sock, buf, MAX_PLS_LEN, rmi->prefs->timeout);
+    if (bytes < SR_SUCCESS)
+        return bytes;
     if (bytes == 0 || bytes == MAX_PLS_LEN) {
-	debug_printf("Failed in getting PLS (%d bytes)\n", bytes);
-	return SR_ERROR_CANT_PARSE_PLS;
+        debug_printf("Failed in getting PLS (%d bytes)\n", bytes);
+        return SR_ERROR_CANT_PARSE_PLS;
     }
     buf[bytes] = 0;
 
-    debug_printf ("Parsing pls\n");
-    debug_printf ("%s\n", buf);
-    debug_printf ("---\n");
+    debug_printf("Parsing pls\n");
+    debug_printf("%s\n", buf);
+    debug_printf("---\n");
 
-    /* Try to find an open server based on the number of open slots 
+    /* Try to find an open server based on the number of open slots
        in the Title field.  */
     rc = SR_ERROR_CANT_PARSE_PLS;
     for (s = 1; s <= 99; s++) {
-	char buf1[20];
-	int num_scanned, used, total, open;
-	int best_open = 0;
+        char buf1[20];
+        int num_scanned, used, total, open;
+        int best_open = 0;
 
-	sprintf (buf1, "File%d=", s);
-	debug_printf ("Searching for %s in %s\n", buf1, buf);
-	if (!extract_header_value (buf, location_buf, buf1, 
-				   sizeof(location_buf))) {
-	    /* No more URLs in pls */
-	    debug_printf ("s = %d, no more URLs\n", s);
-	    break;
-	}
-	if (s == 1) {
-	    /* Default to first parsed URL */
-	    debug_printf ("Set URL to %s\n", location_buf);
-	    sr_strncpy (info->http_location, location_buf, MAX_HOST_LEN);
-	    rc = SR_SUCCESS;
-	}
-	
-	sprintf (buf1, "Title%d=", s);
-	if (!extract_header_value (buf, title_buf, buf1, sizeof(title_buf))) {
-	    /* Remaining URLs have not title information */
-	    debug_printf ("s = %d, no more title info\n", s);
-	    break;
-	}
-	num_scanned = sscanf (title_buf, "(#%*[0-9] - %d/%d", &used, &total);
-	if (num_scanned != 2) {
-	    /* Title information doesn't have open slots information */
-	    debug_printf ("s = %d, no more open slots info\n", s);
-	    break;
-	}
-	open = total - used;
-	if (open > best_open) {
-	    sr_strncpy (info->http_location, location_buf, MAX_HOST_LEN);
-	    best_open = open;
-	}
+        sprintf(buf1, "File%d=", s);
+        debug_printf("Searching for %s in %s\n", buf1, buf);
+        if (!extract_header_value(buf, location_buf, buf1,
+                                  sizeof(location_buf))) {
+            /* No more URLs in pls */
+            debug_printf("s = %d, no more URLs\n", s);
+            break;
+        }
+        if (s == 1) {
+            /* Default to first parsed URL */
+            debug_printf("Set URL to %s\n", location_buf);
+            sr_strncpy(info->http_location, location_buf, MAX_HOST_LEN);
+            rc = SR_SUCCESS;
+        }
+
+        sprintf(buf1, "Title%d=", s);
+        if (!extract_header_value(buf, title_buf, buf1, sizeof(title_buf))) {
+            /* Remaining URLs have not title information */
+            debug_printf("s = %d, no more title info\n", s);
+            break;
+        }
+        num_scanned = sscanf(title_buf, "(#%*[0-9] - %d/%d", &used, &total);
+        if (num_scanned != 2) {
+            /* Title information doesn't have open slots information */
+            debug_printf("s = %d, no more open slots info\n", s);
+            break;
+        }
+        open = total - used;
+        if (open > best_open) {
+            sr_strncpy(info->http_location, location_buf, MAX_HOST_LEN);
+            best_open = open;
+        }
     }
 
-    debug_printf ("info->http_location = %s\n", info->http_location);
+    debug_printf("info->http_location = %s\n", info->http_location);
     //sr_strncpy (info->http_location, location_buf, MAX_HOST_LEN);
 
     return rc;
@@ -942,59 +1008,58 @@ http_get_pls (RIP_MANAGER_INFO* rmi, HSOCKET *sock, SR_HTTP_HEADER *info)
 mp3/3rd Bass/3rd bass - Al z A-B-Cee z.mp3
 */
 static error_code
-http_get_m3u (RIP_MANAGER_INFO* rmi, HSOCKET *sock, SR_HTTP_HEADER *info)
-{
+http_get_m3u(RIP_MANAGER_INFO* rmi, HSOCKET* sock, SR_HTTP_HEADER* info) {
     int bytes;
     char buf[MAX_M3U_LEN];
     char* p;
 
-    debug_printf ("Reading m3u\n");
-    bytes = socklib_recvall (rmi, sock, buf, MAX_M3U_LEN, rmi->prefs->timeout);
-    if (bytes < SR_SUCCESS) return bytes;
+    debug_printf("Reading m3u\n");
+    bytes = socklib_recvall(rmi, sock, buf, MAX_M3U_LEN, rmi->prefs->timeout);
+    if (bytes < SR_SUCCESS)
+        return bytes;
     if (bytes == 0 || bytes == MAX_M3U_LEN) {
-	debug_printf("Failed in getting M3U (%d bytes)\n", bytes);
-	return SR_ERROR_CANT_PARSE_M3U;
+        debug_printf("Failed in getting M3U (%d bytes)\n", bytes);
+        return SR_ERROR_CANT_PARSE_M3U;
     }
     buf[bytes] = 0;
 
-    debug_printf ("Parsing m3u\n");
-    debug_printf ("%s\n", buf);
-    debug_printf ("---\n");
+    debug_printf("Parsing m3u\n");
+    debug_printf("%s\n", buf);
+    debug_printf("---\n");
 
-    for (p = strtok (buf,"\n"); p!= 0; p = strtok (0, "\n")) {
-	size_t len;
-	if (p[0] == '#') {
-	    continue;
-	}
-	len = strlen (p);
-	if (len > 4 && !strcmp (&p[len-4], ".mp3")) {
-	    continue;
-	}
-	sr_strncpy (info->http_location, p, MAX_HOST_LEN);
-	debug_printf ("Redirecting from M3U to: %s\n", p);
-	return SR_SUCCESS;
+    for (p = strtok(buf, "\n"); p != 0; p = strtok(0, "\n")) {
+        size_t len;
+        if (p[0] == '#') {
+            continue;
+        }
+        len = strlen(p);
+        if (len > 4 && !strcmp(&p[len - 4], ".mp3")) {
+            continue;
+        }
+        sr_strncpy(info->http_location, p, MAX_HOST_LEN);
+        debug_printf("Redirecting from M3U to: %s\n", p);
+        return SR_SUCCESS;
     }
 
-    debug_printf ("Failed parsing M3U\n");
+    debug_printf("Failed parsing M3U\n");
     return SR_ERROR_CANT_PARSE_M3U;
 }
 
 static error_code
-http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url, 
-		   HSOCKET *sock, SR_HTTP_HEADER *info)
-{
+http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url,
+                   HSOCKET* sock, SR_HTTP_HEADER* info) {
     int ret;
     char headbuf[MAX_HEADER_LEN] = {'\0'};
 
-    ret = socklib_read_header (rmi, sock, headbuf, MAX_HEADER_LEN);
+    ret = socklib_read_header(rmi, sock, headbuf, MAX_HEADER_LEN);
     if (ret != SR_SUCCESS) {
-	debug_printf ("socklib_read_header failed\n");
-	return ret;
+        debug_printf("socklib_read_header failed\n");
+        return ret;
     }
 
     if ((ret = http_parse_sc_header(url, headbuf, info)) != SR_SUCCESS) {
-	debug_printf ("http_parse_sc_header failed\n");
-	return ret;
+        debug_printf("http_parse_sc_header failed\n");
+        return ret;
     }
 
     {
@@ -1009,17 +1074,18 @@ http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url,
     }
 
     if (info->content_type == CONTENT_TYPE_PLS) {
-	ret = http_get_pls (rmi, sock, info);
-	if (ret != SR_SUCCESS) {
-	    debug_printf ("http_get_pls failed\n");
-	    return ret;
-	}
-    } else if (info->content_type == CONTENT_TYPE_M3U) {
-	ret = http_get_m3u (rmi, sock, info);
-	if (ret != SR_SUCCESS) {
-	    debug_printf ("http_get_m3u failed\n");
-	    return ret;
-	}
+        ret = http_get_pls(rmi, sock, info);
+        if (ret != SR_SUCCESS) {
+            debug_printf("http_get_pls failed\n");
+            return ret;
+        }
+    }
+    else if (info->content_type == CONTENT_TYPE_M3U) {
+        ret = http_get_m3u(rmi, sock, info);
+        if (ret != SR_SUCCESS) {
+            debug_printf("http_get_m3u failed\n");
+            return ret;
+        }
     }
 
     return SR_SUCCESS;
@@ -1047,61 +1113,61 @@ http_get_sc_header(RIP_MANAGER_INFO* rmi, const char* url,
  */
 /* thanks bob ;) */
 #define CHARS_PER_LINE  72
-static char* 
-b64enc(const char *inbuf, int size)
-{
+
+static char*
+b64enc(const char* inbuf, int size) {
     /* encode 72 characters per line */
     static const char* to_b64 =
-	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     int div = size / 3;
     int rem = size % 3;
-    int chars = div*4 + rem + 1;
+    int chars = div * 4 + rem + 1;
     int newlines = (chars + CHARS_PER_LINE - 1) / CHARS_PER_LINE;
 
     const char* data = inbuf;
-    char* string = (char*) malloc(chars + newlines + 1 + 100);
+    char* string = (char*)malloc(chars + newlines + 1 + 100);
 
     if (string) {
-	register char* buf = string;
+        register char* buf = string;
 
-	chars = 0;
+        chars = 0;
 
-	/*@+charindex@*/
-	while (div > 0) {
-	    buf[0] = to_b64[ (data[0] >> 2) & 0x3f];
-	    buf[1] = to_b64[((data[0] << 4) & 0x30) + ((data[1] >> 4) & 0xf)];
-	    buf[2] = to_b64[((data[1] << 2) & 0x3c) + ((data[2] >> 6) & 0x3)];
-	    buf[3] = to_b64[  data[2] & 0x3f];
-	    data += 3;
-	    buf += 4;
-	    div--;
-	    chars += 4;
-	    if (chars == CHARS_PER_LINE) {
-		chars = 0;
-		*(buf++) = '\n';
-	    }
-	}
+        /*@+charindex@*/
+        while (div > 0) {
+            buf[0] = to_b64[(data[0] >> 2) & 0x3f];
+            buf[1] = to_b64[((data[0] << 4) & 0x30) + ((data[1] >> 4) & 0xf)];
+            buf[2] = to_b64[((data[1] << 2) & 0x3c) + ((data[2] >> 6) & 0x3)];
+            buf[3] = to_b64[data[2] & 0x3f];
+            data += 3;
+            buf += 4;
+            div--;
+            chars += 4;
+            if (chars == CHARS_PER_LINE) {
+                chars = 0;
+                *(buf++) = '\n';
+            }
+        }
         switch (rem) {
         case 2:
-	    buf[0] = to_b64[ (data[0] >> 2) & 0x3f];
-	    buf[1] = to_b64[((data[0] << 4) & 0x30) + ((data[1] >> 4) & 0xf)];
-	    buf[2] = to_b64[ (data[1] << 2) & 0x3c];
-	    buf[3] = '=';
-	    buf += 4;
-	    chars += 4;
-	    break;
+            buf[0] = to_b64[(data[0] >> 2) & 0x3f];
+            buf[1] = to_b64[((data[0] << 4) & 0x30) + ((data[1] >> 4) & 0xf)];
+            buf[2] = to_b64[(data[1] << 2) & 0x3c];
+            buf[3] = '=';
+            buf += 4;
+            chars += 4;
+            break;
         case 1:
-	    buf[0] = to_b64[ (data[0] >> 2) & 0x3f];
-	    buf[1] = to_b64[ (data[0] << 4) & 0x30];
-	    buf[2] = '=';
-	    buf[3] = '=';
-	    buf += 4;
-	    chars += 4;
-	    break;
-	}
-	/* *(buf++) = '\n'; This would result in a buffer overrun */
-	*buf = '\0';
+            buf[0] = to_b64[(data[0] >> 2) & 0x3f];
+            buf[1] = to_b64[(data[0] << 4) & 0x30];
+            buf[2] = '=';
+            buf[3] = '=';
+            buf += 4;
+            chars += 4;
+            break;
+        }
+        /* *(buf++) = '\n'; This would result in a buffer overrun */
+        *buf = '\0';
     }
     return string;
 }

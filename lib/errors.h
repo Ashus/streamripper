@@ -47,7 +47,7 @@
 #define SR_ERROR_CANT_BIND_ON_PORT		- 0x1F
 #define SR_ERROR_HOST_NOT_CONNECTED		- 0x20
 #define SR_ERROR_HTTP_404_ERROR			- 0x21
-#define SR_ERROR_HTTP_401_ERROR			- 0x22	
+#define SR_ERROR_HTTP_401_ERROR			- 0x22
 #define SR_ERROR_HTTP_502_ERROR			- 0x23  // Connection Refused
 #define SR_ERROR_CANT_CREATE_FILE		- 0x24
 #define SR_ERROR_CANT_WRITE_TO_FILE		- 0x25
@@ -86,14 +86,13 @@
 #define SR_ERROR_TLS_VERIFICATION_FAILED         - 0x46
 #define SR_ERROR_HTTP_RETRY                      - 0x47
 
-typedef struct ERROR_INFOst
-{
+typedef struct ERROR_INFOst {
     char error_str[MAX_ERROR_STR];
     error_code error_code;
 } ERROR_INFO;
 
 
-void errors_init (void);
-char* errors_get_string (error_code code);
+void errors_init(void);
+char* errors_get_string(error_code code);
 
 #endif

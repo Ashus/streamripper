@@ -11,7 +11,7 @@ SET (STREAMRIPPER_LIB_SRC
 	callback.c callback.h
 	console_output.c console_output.h
 	cbuf3.c cbuf3.h
-	charset.c charset.h
+	../third_party/charset.c ../third_party/charset.h
 	debug.c	debug.h
 	errors.c errors.h
 	external.c external.h
@@ -21,7 +21,7 @@ SET (STREAMRIPPER_LIB_SRC
 	findsep.c findsep.h
 	findsep2.c
 	http.c http.h
-	iconvert.c
+	../third_party/iconvert.c
 	mchar.c mchar.h
 	parse.c parse.h
 	prefs.c prefs.h
@@ -39,20 +39,20 @@ SET (STREAMRIPPER_LIB_SRC
 	socklib.c socklib.h
 	threadlib.c threadlib.h
 	track_info.c track_info.h
-	utf8.c utf8.h
+	../third_party/utf8.c ../third_party/utf8.h
 
-	charmaps.h
+	../third_party/charmaps.h
 	confw32.h
-	list.h
+	../third_party/linux/list.h
 	sr_compat.h
 	srtypes.h
-	uce_dirent.h
+	../third_party/dirent/uce_dirent.h
 	)
 
 IF (NOT IBERTY_FOUND)
   SET (STREAMRIPPER_LIB_SRC
     ${STREAMRIPPER_LIB_SRC}
-    argv.c)
+    ../third_party/libiberty/argv.c)
 ENDIF (NOT IBERTY_FOUND)
 
 ADD_LIBRARY (streamripper1 ${STREAMRIPPER_LIB_SRC})

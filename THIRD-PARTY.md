@@ -1,5 +1,9 @@
 # Bundled libraries
 
+Inherited source helpers are kept under `third_party`, separate from application
+code. See [third_party/README.md](third_party/README.md) for their layout,
+provenance, license notices and formatting exclusions.
+
 The binaries in `dist` use official MSYS2 mingw64 packages. The table records the exact package versions used for this release and their corresponding source packages, including original source code, PKGBUILD recipes, and MSYS2 patches. License notices are included in `dist/licenses`, with the GPL text in `dist/COPYING`. The modified Streamripper source is included in this repository.
 
 | Library | Package version | License | Corresponding source |

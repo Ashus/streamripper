@@ -1,8 +1,8 @@
 /* streamripper.c
- * This little app should be seen as a demo for how to use the stremripper lib. 
- * The only file you need from the /lib dir is rip_mananger.h, and perhapes 
+ * This little app should be seen as a demo for how to use the stremripper lib.
+ * The only file you need from the /lib dir is rip_mananger.h, and perhapes
  * util.h (for stuff like formating the number of bytes).
- * 
+ *
  * the two functions of interest are main() for how to call rip_mananger_start
  * and rip_callback, which is a how you find out whats going on with the rip.
  * the rest of this file is really just boring command line parsing code.
@@ -48,38 +48,37 @@
 /*****************************************************************************
  * Private functions
  *****************************************************************************/
-static void print_usage (FILE* stream);
-static void print_status (RIP_MANAGER_INFO *rmi);
-static void catch_sig (int code);
-static void parse_arguments (STREAM_PREFS *prefs, int argc, char **argv);
-static void rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data);
-static void parse_extended_options (STREAM_PREFS *prefs, const char *rule);
-static void verify_splitpoint_rules (STREAM_PREFS *prefs);
-static void print_to_console (char* fmt, ...);
+static void print_usage(FILE* stream);
+static void print_status(RIP_MANAGER_INFO* rmi);
+static void catch_sig(int code);
+static void parse_arguments(STREAM_PREFS* prefs, int argc, char** argv);
+static void rip_callback(RIP_MANAGER_INFO* rmi, int message, void* data);
+static void parse_extended_options(STREAM_PREFS* prefs, const char* rule);
+static void verify_splitpoint_rules(STREAM_PREFS* prefs);
+static void print_to_console(char* fmt, ...);
 
 /*****************************************************************************
  * Private variables
  *****************************************************************************/
 static char m_buffer_chars[] = {'\\', '|', '/', '-', '*'}; /* for formating */
 //static RIP_MANAGER_INFO 	m_curinfo; /* from the rip_manager callback */
-static BOOL			m_started = FALSE;
-static BOOL			m_alldone = FALSE;
+static BOOL m_started = FALSE;
+static BOOL m_alldone = FALSE;
 static volatile sig_atomic_t m_got_sig = FALSE;
-static BOOL			m_dont_print = FALSE;
-static BOOL			m_print_stderr = FALSE;
+static BOOL m_dont_print = FALSE;
+static BOOL m_print_stderr = FALSE;
 static const char m_version_banner[] =
     "Streamripper " SRVERSION " (built: " __DATE__ " " __TIME__ ")\n"
     "https://github.com/Ashus/streamripper\n";
-static int                      m_exit_code = EXIT_SUCCESS;
-time_t				m_stop_time = 0;
+static int m_exit_code = EXIT_SUCCESS;
+time_t m_stop_time = 0;
 
 #ifdef WIN32
 static HANDLE m_stop_event;
 static HANDLE m_shutdown_complete;
 
 static BOOL WINAPI
-console_control_handler(DWORD event)
-{
+console_control_handler(DWORD event) {
     switch (event) {
     case CTRL_C_EVENT:
     case CTRL_BREAK_EVENT:
@@ -103,33 +102,32 @@ console_control_handler(DWORD event)
  * and contains all the various things one can do with the rip_mananger
  * like a relay server, auto-reconnects, output dir's stuff like that.
  *
- * Notice the crappy while loop, this is because the streamripper lib 
- * is asyncrouns (spelling?) only. It probably should have a blocking 
+ * Notice the crappy while loop, this is because the streamripper lib
+ * is asyncrouns (spelling?) only. It probably should have a blocking
  * call as well, but i needed this for window'd apps.
  */
 
 int
-main (int argc, char *argv[])
-{
+main(int argc, char* argv[]) {
     int ret;
     time_t temp_time;
     STREAM_PREFS prefs;
-    RIP_MANAGER_INFO *rmi = 0;
+    RIP_MANAGER_INFO* rmi = 0;
 
 #ifdef SR_MODERN_WINDOWS
     argv = g_win32_get_command_line();
     argc = g_strv_length(argv);
 #endif
-    sr_set_locale ();
+    sr_set_locale();
 
-    signal (SIGINT, catch_sig);
-    signal (SIGTERM, catch_sig);
+    signal(SIGINT, catch_sig);
+    signal(SIGTERM, catch_sig);
 
-    parse_arguments (&prefs, argc, argv);
+    parse_arguments(&prefs, argc, argv);
 
-    print_to_console ("Connecting...\n");
-    
-    rip_manager_init ();
+    print_to_console("Connecting...\n");
+
+    rip_manager_init();
 
 #ifdef WIN32
     m_stop_event = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -142,13 +140,13 @@ main (int argc, char *argv[])
 #endif
 
     /* Launch the ripping thread */
-    if ((ret = rip_manager_start (&rmi, &prefs, rip_callback)) != SR_SUCCESS) {
-	sr_console_printf(stderr, "Couldn't connect to %s\n", prefs.url);
-	exit(1);
+    if ((ret = rip_manager_start(&rmi, &prefs, rip_callback)) != SR_SUCCESS) {
+        sr_console_printf(stderr, "Couldn't connect to %s\n", prefs.url);
+        exit(1);
     }
 
-    /* 
-     * The m_got_sig thing is because you can't call into a thread 
+    /*
+     * The m_got_sig thing is because you can't call into a thread
      * (i.e. rip_manager_stop) from a signal handler.. or at least not
      * in FreeBSD 3.4, i don't know about linux or NT.
      */
@@ -159,19 +157,19 @@ main (int argc, char *argv[])
             break;
         }
 #else
-	sleep(1);
+        sleep(1);
 #endif
-	time(&temp_time);
-	if (m_stop_time && (temp_time >= m_stop_time)) {
-	    print_to_console ("\nTime to stop is here, bailing\n");
-	    break; 
-	}	
+        time(&temp_time);
+        if (m_stop_time && (temp_time >= m_stop_time)) {
+            print_to_console("\nTime to stop is here, bailing\n");
+            break;
+        }
     }
 
-    print_to_console (m_got_sig ? "\nshutting down\n" : "shutting down\n");
+    print_to_console(m_got_sig ? "\nshutting down\n" : "shutting down\n");
 
-    rip_manager_stop (rmi);
-    rip_manager_cleanup ();
+    rip_manager_stop(rmi);
+    rip_manager_cleanup();
     prefs_cleanup();
     free(rmi);
 #ifdef WIN32
@@ -186,71 +184,68 @@ main (int argc, char *argv[])
 }
 
 void
-catch_sig(int code)
-{
+catch_sig(int code) {
     if (!m_started)
         exit(2);
     m_got_sig = TRUE;
 }
 
-/* In 1.63 I have changed two things: sending output to stdout 
+/* In 1.63 I have changed two things: sending output to stdout
    instead of stderr, and adding fflush as per the sticky in the forum. */
 static void
-print_to_console (char* fmt, ...)
-{
+print_to_console(char* fmt, ...) {
     va_list argptr;
 
     if (!m_dont_print) {
-	va_start (argptr, fmt);
+        va_start(argptr, fmt);
 
-	sr_console_vprintf(m_print_stderr ? stderr : stdout, fmt, argptr);
+        sr_console_vprintf(m_print_stderr ? stderr : stdout, fmt, argptr);
 
-	va_end (argptr);
+        va_end(argptr);
     }
 }
 
-/* 
+/*
  * This is to handle RM_UPDATE messages from rip_callback(), and more
  * importantly the RIP_MANAGER_INFO struct. Most of the code here
  * is for handling the pretty formating stuff otherwise it could be
  * much smaller.
  */
 void
-print_status (RIP_MANAGER_INFO *rmi)
-{
-    STREAM_PREFS *prefs = rmi->prefs;
+print_status(RIP_MANAGER_INFO* rmi) {
+    STREAM_PREFS* prefs = rmi->prefs;
     char status_str[128];
     char duration_str[32];
     static int buffering_tick = 0;
     static BOOL printed_fullinfo = FALSE;
 
     if (m_dont_print)
-	return;
+        return;
 
     if (printed_fullinfo && rmi->callback_filename[0]) {
+        switch (rmi->status) {
+        case RM_STATUS_BUFFERING:
+            buffering_tick++;
+            if (buffering_tick == 5)
+                buffering_tick = 0;
 
-	switch(rmi->status)
-	{
-	case RM_STATUS_BUFFERING:
-	    buffering_tick++;
-	    if (buffering_tick == 5)
-		buffering_tick = 0;
-
-	    sprintf(status_str,"buffering - %c",
-		    m_buffer_chars[buffering_tick]);
+            sprintf(status_str, "buffering - %c",
+                    m_buffer_chars[buffering_tick]);
 
             sr_console_status(m_print_stderr ? stderr : stdout, status_str,
                               rmi->callback_filename, NULL);
-	    break;
+            break;
 
-	case RM_STATUS_RIPPING:
-	    if (rmi->callback_filtered) {
-		strcpy(status_str, "filtered");
-	    } else if (rmi->callback_incomplete) {
-		strcpy(status_str, "incomplete");
-	    } else {
-		strcpy(status_str, "ripping");
-	    }
+        case RM_STATUS_RIPPING:
+            if (rmi->callback_filtered) {
+                strcpy(status_str, "filtered");
+            }
+            else if (rmi->callback_incomplete) {
+                strcpy(status_str, "incomplete");
+            }
+            else {
+                strcpy(status_str, "ripping");
+            }
             if (!rmi->callback_duration_known) {
                 guint64 bytes = rmi->callback_filesize;
                 if (bytes < 1000)
@@ -262,7 +257,8 @@ print_status (RIP_MANAGER_INFO *rmi)
                     g_snprintf(duration_str, sizeof(duration_str), "%" G_GUINT64_FORMAT ",%02uMB",
                                hundredths / 100, (unsigned)(hundredths % 100));
                 }
-            } else {
+            }
+            else {
                 guint64 seconds = rmi->callback_duration_ms / 1000;
                 if (seconds >= 3600)
                     g_snprintf(duration_str, sizeof(duration_str), "%" G_GUINT64_FORMAT ":%02u:%02u",
@@ -273,66 +269,79 @@ print_status (RIP_MANAGER_INFO *rmi)
             }
             sr_console_status(m_print_stderr ? stderr : stdout, status_str,
                               rmi->callback_filename, duration_str);
-	    break;
-	case RM_STATUS_RECONNECTING:
-	    strcpy(status_str, "re-connecting");
+            break;
+        case RM_STATUS_RECONNECTING:
+            strcpy(status_str, "re-connecting");
             sr_console_status(m_print_stderr ? stderr : stdout, status_str, "", NULL);
-	    break;
-	}
-			
+            break;
+        }
     }
     if (!printed_fullinfo) {
         mchar station_name[SR_MAX_PATH];
         /* ICY header values use the same encoding policy as track metadata. */
         gstring_from_string(rmi, station_name, sizeof(station_name),
                             rmi->streamname, CODESET_METADATA);
-	print_to_console ("host: %s\n"
-			  "server name: %s\n"
-			  "stream: %s\n",
-			  rmi->stream_host,
-			  rmi->server_name,
-			  rmi->http_info.have_icy_name ? station_name : "Unknown station");
-	const char *format;
-	switch (rmi->http_info.content_type) {
-	case CONTENT_TYPE_MP3: format = "MP3"; break;
-	case CONTENT_TYPE_AAC: format = "AAC (ADTS)"; break;
-	case CONTENT_TYPE_OGG: format = "Vorbis (Ogg)"; break;
-	case CONTENT_TYPE_FLAC:
-	    format = rmi->flac_in_ogg ? "FLAC (Ogg)" : "FLAC";
-	    break;
-	case CONTENT_TYPE_HLS:
-	    format = stream_capture_file_type(rmi) == CONTENT_TYPE_AAC
-	        ? "AAC (ADTS, HLS)" : "HLS (MPEG-TS)";
-	    break;
-	case CONTENT_TYPE_NSV: format = "NSV"; break;
-	case CONTENT_TYPE_ULTRAVOX: format = "Ultravox"; break;
-	default: format = "unknown"; break;
-	}
-	print_to_console("format: %s\n", format);
-	if (rmi->http_bitrate > 0) {
-	    print_to_console ("declared bitrate: %d\n",
-			      rmi->http_bitrate);
-	}
-	if (rmi->meta_interval != NO_META_INTERVAL) {
-	    print_to_console ("meta interval: %d\n",
-			      rmi->meta_interval);
-	}
-	if (rmi->relaylib_info.m_running) {
+        print_to_console("host: %s\n"
+                         "server name: %s\n"
+                         "stream: %s\n",
+                         rmi->stream_host,
+                         rmi->server_name,
+                         rmi->http_info.have_icy_name ? station_name : "Unknown station");
+        const char* format;
+        switch (rmi->http_info.content_type) {
+        case CONTENT_TYPE_MP3:
+            format = "MP3";
+            break;
+        case CONTENT_TYPE_AAC:
+            format = "AAC (ADTS)";
+            break;
+        case CONTENT_TYPE_OGG:
+            format = "Vorbis (Ogg)";
+            break;
+        case CONTENT_TYPE_FLAC:
+            format = rmi->flac_in_ogg ? "FLAC (Ogg)" : "FLAC";
+            break;
+        case CONTENT_TYPE_HLS:
+            format = stream_capture_file_type(rmi) == CONTENT_TYPE_AAC
+                ? "AAC (ADTS, HLS)"
+                : "HLS (MPEG-TS)";
+            break;
+        case CONTENT_TYPE_NSV:
+            format = "NSV";
+            break;
+        case CONTENT_TYPE_ULTRAVOX:
+            format = "Ultravox";
+            break;
+        default:
+            format = "unknown";
+            break;
+        }
+        print_to_console("format: %s\n", format);
+        if (rmi->http_bitrate > 0) {
+            print_to_console("declared bitrate: %d\n",
+                             rmi->http_bitrate);
+        }
+        if (rmi->meta_interval != NO_META_INTERVAL) {
+            print_to_console("meta interval: %d\n",
+                             rmi->meta_interval);
+        }
+        if (rmi->relaylib_info.m_running) {
             if (prefs->relay_ip[0]) {
                 print_to_console(strchr(prefs->relay_ip, ':') ? "relay: [%s]:%u\n" : "relay: %s:%u\n",
                                  prefs->relay_ip, prefs->relay_port);
-            } else {
+            }
+            else {
                 print_to_console("relay port: %u\n", prefs->relay_port);
             }
-	    print_to_console ("[%-13s]\r", "getting track name");
-	}
+            print_to_console("[%-13s]\r", "getting track name");
+        }
 
-	printed_fullinfo = TRUE;
+        printed_fullinfo = TRUE;
     }
 }
 
 /*
- * This will get called whenever anything interesting happens with the 
+ * This will get called whenever anything interesting happens with the
  * stream. Interesting are progress updates, error's, when the rip
  * thread stops (RM_DONE) starts (RM_START) and when we get a new track.
  *
@@ -340,48 +349,45 @@ print_status (RIP_MANAGER_INFO *rmi)
  * and prints out stuff to the screen.
  */
 void
-rip_callback (RIP_MANAGER_INFO* rmi, int message, void *data)
-{
-    ERROR_INFO *err;
-    switch(message)
-    {
+rip_callback(RIP_MANAGER_INFO* rmi, int message, void* data) {
+    ERROR_INFO* err;
+    switch (message) {
     case RM_UPDATE:
-	print_status (rmi);
-	break;
+        print_status(rmi);
+        break;
     case RM_ERROR:
-	err = (ERROR_INFO*)data;
-        if (err->error_code == SR_ERROR_OUTPUT_DIRECTORY_LOCKED) m_exit_code = EXIT_FAILURE;
-	sr_console_printf(stderr, "\nerror %d [%s]\n", err->error_code, err->error_str);
-	m_alldone = TRUE;
-	break;
+        err = (ERROR_INFO*)data;
+        if (err->error_code == SR_ERROR_OUTPUT_DIRECTORY_LOCKED)
+            m_exit_code = EXIT_FAILURE;
+        sr_console_printf(stderr, "\nerror %d [%s]\n", err->error_code, err->error_str);
+        m_alldone = TRUE;
+        break;
     case RM_DONE:
-	print_to_console ("bye..\n");
-	m_alldone = TRUE;
-	break;
+        print_to_console("bye..\n");
+        m_alldone = TRUE;
+        break;
     case RM_NEW_TRACK:
-	print_to_console ("\n");
-	break;
+        print_to_console("\n");
+        break;
     case RM_TRACK_INTERRUPTED:
         print_status(rmi);
         print_to_console("\n");
         break;
     case RM_STARTED:
-	m_started = TRUE;
-	break;
+        m_started = TRUE;
+        break;
     }
 }
 
-/* Usage should be printed to stdout when it is not an error 
+/* Usage should be printed to stdout when it is not an error
    http://www.gnu.org/prep/standards/standards.html */
 static void
-print_usage_option(FILE *stream, const char *option, const char *description)
-{
+print_usage_option(FILE* stream, const char* option, const char* description) {
     sr_console_printf(stream, "  %-38s  %s\n", option, description);
 }
 
 static void
-print_usage (FILE* stream)
-{
+print_usage(FILE* stream) {
     fputs(m_version_banner, stream);
     fputc('\n', stream);
     fputs("Usage: streamripper URL [OPTIONS]\n", stream);
@@ -464,18 +470,17 @@ print_usage (FILE* stream)
     print_usage_option(stream, "--debug", "Write a debugging trace");
 }
 
-/* 
+/*
  * Bla, boring agument parsing crap, only reason i didn't use getopt
  * (which i did for an earlyer version) is because i couldn't find a good
- * port of it under Win32.. there probably is one, maybe i didn't look 
- * hard enough. 
+ * port of it under Win32.. there probably is one, maybe i didn't look
+ * hard enough.
  */
 /* Map supported long aliases to the same handlers as the original short options. */
-static const char *
-normalize_option(char *input, char **argument)
-{
+static const char*
+normalize_option(char* input, char** argument) {
     static const struct {
-        const char *name;
+        const char* name;
         char short_option[3];
     } aliases[] = {
         {"help", "-h"},
@@ -508,11 +513,13 @@ normalize_option(char *input, char **argument)
         {"no-port-scan", "-z"},
     };
     size_t i;
-    if (input[0] != '-' || input[1] != '-') return input;
+    if (input[0] != '-' || input[1] != '-')
+        return input;
     for (i = 0; i < G_N_ELEMENTS(aliases); i++) {
         size_t length = strlen(aliases[i].name);
         if (strncmp(input + 2, aliases[i].name, length) ||
-            (input[length + 2] && input[length + 2] != '=')) continue;
+            (input[length + 2] && input[length + 2] != '='))
+            continue;
         if (input[length + 2] == '=') {
             if (!strchr("adDEIklLmMopqRruw", aliases[i].short_option[1])) {
                 sr_console_printf(stderr, "option --%s does not take an argument\n", aliases[i].name);
@@ -526,30 +533,32 @@ normalize_option(char *input, char **argument)
 }
 
 static void
-parse_relay_address(STREAM_PREFS *prefs, const char *value)
-{
-    const char *port = value;
-    const char *host = NULL;
+parse_relay_address(STREAM_PREFS* prefs, const char* value) {
+    const char* port = value;
+    const char* host = NULL;
     size_t host_length = 0;
-    char *end;
+    char* end;
     guint64 number;
     if (*value == '[') {
-        const char *closing = strchr(value + 1, ']');
+        const char* closing = strchr(value + 1, ']');
         if (!closing || closing == value + 1 || (closing[1] && closing[1] != ':'))
             goto invalid;
         host = value + 1;
         host_length = closing - host;
         port = closing[1] ? closing + 2 : NULL;
-    } else {
-        const char *colon = strchr(value, ':');
+    }
+    else {
+        const char* colon = strchr(value, ':');
         if (colon) {
-            if (colon == value || strchr(colon + 1, ':')) goto invalid;
+            if (colon == value || strchr(colon + 1, ':'))
+                goto invalid;
             host = value;
             host_length = colon - host;
             port = colon + 1;
         }
     }
-    if (host_length >= sizeof(prefs->relay_ip)) goto invalid;
+    if (host_length >= sizeof(prefs->relay_ip))
+        goto invalid;
     if (port) {
         errno = 0;
         number = g_ascii_strtoull(port, &end, 10);
@@ -566,10 +575,10 @@ invalid:
     sr_console_printf(stderr, "Invalid relay address; use PORT, HOST:PORT, or [IPv6]:PORT (port 1-65535).\n");
     exit(EXIT_FAILURE);
 }
+
 static u_long
-parse_timeout(const char *value)
-{
-    char *end;
+parse_timeout(const char* value) {
+    char* end;
     guint64 timeout;
     errno = 0;
     timeout = g_ascii_strtoull(value, &end, 10);
@@ -581,25 +590,25 @@ parse_timeout(const char *value)
 }
 
 static void
-parse_arguments (STREAM_PREFS* prefs, int argc, char **argv)
-{
+parse_arguments(STREAM_PREFS* prefs, int argc, char** argv) {
     int i;
-    char *c;
-    const char *option;
-    char *argument;
+    char* c;
+    const char* option;
+    char* argument;
 
     if (argc < 2) {
-	print_usage (stdout);
-	exit(2);
+        print_usage(stdout);
+        exit(2);
     }
 
     // Get URL
-g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
+    g_strlcpy(prefs->url, argv[1], MAX_URL_LEN);
 
     /* Configuration is opt-in; command-line options always take precedence. */
-    const char *config_file = NULL;
+    const char* config_file = NULL;
     for (i = 2; i < argc; i++) {
-        if (argv[i][0] != '-') continue;
+        if (argv[i][0] != '-')
+            continue;
         argument = NULL;
         option = normalize_option(argv[i], &argument);
         if (!strcmp(option, "--config") || g_str_has_prefix(option, "--config=")) {
@@ -607,26 +616,35 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
                 sr_console_printf(stderr, "Option --config may only be specified once.\n");
                 exit(EXIT_FAILURE);
             }
-            if (option[8] == '=') config_file = option + 9;
-            else if (i + 1 < argc && argv[i + 1][0] != '-') config_file = argv[++i];
+            if (option[8] == '=')
+                config_file = option + 9;
+            else
+                if (i + 1 < argc && argv[i + 1][0] != '-')
+                    config_file = argv[++i];
             if (!config_file || !*config_file) {
                 sr_console_printf(stderr, "Option --config requires a file path.\n");
                 exit(EXIT_FAILURE);
             }
-        } else if (!argument && strchr("dDEfIklLmMopRuwaqr", option[1]) &&
-                   i + 1 < argc && argv[i + 1][0] != '-') {
+        }
+        else if (!argument && strchr("dDEfIklLmMopRuwaqr", option[1]) &&
+            i + 1 < argc && argv[i + 1][0] != '-') {
             i++; /* Skip values so an option value cannot become a config path. */
         }
     }
-    if (!prefs_load_file(config_file)) exit(EXIT_FAILURE);
-    prefs_get_stream_prefs (prefs, prefs->url);
+    if (!prefs_load_file(config_file))
+        exit(EXIT_FAILURE);
+    prefs_get_stream_prefs(prefs, prefs->url);
 
     // Parse arguments
     for (i = 1; i < argc; i++) {
-	if (argv[i][0] != '-')
-	    continue;
-        if (!strcmp(argv[i], "--config")) { i++; continue; }
-        if (g_str_has_prefix(argv[i], "--config=")) continue;
+        if (argv[i][0] != '-')
+            continue;
+        if (!strcmp(argv[i], "--config")) {
+            i++;
+            continue;
+        }
+        if (g_str_has_prefix(argv[i], "--config="))
+            continue;
 
         /* Keep argv ownership intact; attached values point into its strings. */
         argument = NULL;
@@ -638,12 +656,12 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
                 exit(EXIT_FAILURE);
             }
             argument = argv[++i];
-        } else if (!argument && strchr("aqr", option[1]) &&
-                   i + 1 < argc && argv[i + 1][0] != '-') {
+        }
+        else if (!argument && strchr("aqr", option[1]) &&
+            i + 1 < argc && argv[i + 1][0] != '-') {
             argument = argv[++i];
         }
-	switch (option[1])
-	{
+        switch (option[1]) {
         case '4':
         case '6':
             if (prefs->ip_version && prefs->ip_version != option[1] - '0') {
@@ -652,116 +670,119 @@ g_strlcpy (prefs->url, argv[1], MAX_URL_LEN);
             }
             prefs->ip_version = option[1] - '0';
             break;
-	case 'a':
-	    /* Create single file output + cue sheet */
-	    OPT_FLAG_SET (prefs->flags, OPT_SINGLE_FILE_OUTPUT, 1);
-	    prefs->showfile_pattern[0] = 0;
-	    if (!argument) break;
-g_strlcpy (prefs->showfile_pattern, argument, SR_MAX_PATH);
-	    break;
-	case 'A':
-	    OPT_FLAG_SET (prefs->flags, OPT_INDIVIDUAL_TRACKS, 0);
-	    break;
-	case 'c':
-	    OPT_FLAG_SET (prefs->flags, OPT_AUTO_RECONNECT, 0);
-	    break;
-	case 'd':
-g_strlcpy(prefs->output_directory, argument, SR_MAX_PATH);
-	    break;
-	case 'D':
-g_strlcpy(prefs->output_pattern, argument, SR_MAX_PATH);
-	    break;
-	case 'E':
-	    OPT_FLAG_SET (prefs->flags, OPT_EXTERNAL_CMD, 1);
-g_strlcpy(prefs->ext_cmd, argument, SR_MAX_PATH);
-	    break;
-	case 'f':
-	    sr_console_printf(stderr, "Error: -f dropstring option is obsolete. "
-		     "Please use -w parse_rules instead.\n");
-	    exit (1);
-	case 'h':
-	case '?':
-	    print_usage (stdout);
+        case 'a':
+            /* Create single file output + cue sheet */
+            OPT_FLAG_SET(prefs->flags, OPT_SINGLE_FILE_OUTPUT, 1);
+            prefs->showfile_pattern[0] = 0;
+            if (!argument)
+                break;
+            g_strlcpy(prefs->showfile_pattern, argument, SR_MAX_PATH);
+            break;
+        case 'A':
+            OPT_FLAG_SET(prefs->flags, OPT_INDIVIDUAL_TRACKS, 0);
+            break;
+        case 'c':
+            OPT_FLAG_SET(prefs->flags, OPT_AUTO_RECONNECT, 0);
+            break;
+        case 'd':
+            g_strlcpy(prefs->output_directory, argument, SR_MAX_PATH);
+            break;
+        case 'D':
+            g_strlcpy(prefs->output_pattern, argument, SR_MAX_PATH);
+            break;
+        case 'E':
+            OPT_FLAG_SET(prefs->flags, OPT_EXTERNAL_CMD, 1);
+            g_strlcpy(prefs->ext_cmd, argument, SR_MAX_PATH);
+            break;
+        case 'f':
+            sr_console_printf(stderr, "Error: -f dropstring option is obsolete. "
+                              "Please use -w parse_rules instead.\n");
+            exit(1);
+        case 'h':
+        case '?':
+            print_usage(stdout);
             exit(0);
-	    break;
-	case 'i':
-	    OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 0);
-	    OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 0);
-	    break;
-	case 'I':
-g_strlcpy(prefs->if_name, argument, SR_MAX_PATH);
-	    break;
-	case 'k':
-	    prefs->dropcount = atoi(argument);
-	    break;
-	case 'l':
-	    time(&m_stop_time);
-	    m_stop_time += atoi(argument);
-	    break;
-	case 'L':
-g_strlcpy(prefs->pls_file, argument, SR_MAX_PATH);
-	    break;
-	case 'm':
-	    prefs->timeout = parse_timeout(argument);
-	    break;
- 	case 'M':
+            break;
+        case 'i':
+            OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 0);
+            OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 0);
+            break;
+        case 'I':
+            g_strlcpy(prefs->if_name, argument, SR_MAX_PATH);
+            break;
+        case 'k':
+            prefs->dropcount = atoi(argument);
+            break;
+        case 'l':
+            time(&m_stop_time);
+            m_stop_time += atoi(argument);
+            break;
+        case 'L':
+            g_strlcpy(prefs->pls_file, argument, SR_MAX_PATH);
+            break;
+        case 'm':
+            prefs->timeout = parse_timeout(argument);
+            break;
+        case 'M':
             prefs->maxMB_rip_size = atoi(argument);
-	    OPT_FLAG_SET(prefs->flags, OPT_CHECK_MAX_BYTES, 1);
- 	    break;
-	case 'o':
-	    prefs->overwrite = string_to_overwrite_opt (argument);
-	    if (prefs->overwrite == OVERWRITE_UNKNOWN) {
-		sr_console_printf(stderr, "Error: -o option requires an argument\n");
-		exit (1);
-	    }
-	    break;
-	case 'p':
-g_strlcpy(prefs->proxyurl, argument, MAX_URL_LEN);
-	    break;
-	case 'P':
-	    sr_console_printf(stderr, "Error: -P prefix option is obsolete. "
-		     "Please use -D pattern instead.\n");
-	    exit (1);
-	case 'q':
-	    OPT_FLAG_SET(prefs->flags, OPT_COUNT_FILES, 1);
-	    prefs->count_start = -1;     /* -1 means auto-detect */
-	    if (!argument) break;
-	    prefs->count_start = atoi(argument);
-	    break;
-	case 'r':
-	    OPT_FLAG_SET(prefs->flags, OPT_MAKE_RELAY, 1);
-	    if (!argument) break;
+            OPT_FLAG_SET(prefs->flags, OPT_CHECK_MAX_BYTES, 1);
+            break;
+        case 'o':
+            prefs->overwrite = string_to_overwrite_opt(argument);
+            if (prefs->overwrite == OVERWRITE_UNKNOWN) {
+                sr_console_printf(stderr, "Error: -o option requires an argument\n");
+                exit(1);
+            }
+            break;
+        case 'p':
+            g_strlcpy(prefs->proxyurl, argument, MAX_URL_LEN);
+            break;
+        case 'P':
+            sr_console_printf(stderr, "Error: -P prefix option is obsolete. "
+                              "Please use -D pattern instead.\n");
+            exit(1);
+        case 'q':
+            OPT_FLAG_SET(prefs->flags, OPT_COUNT_FILES, 1);
+            prefs->count_start = -1; /* -1 means auto-detect */
+            if (!argument)
+                break;
+            prefs->count_start = atoi(argument);
+            break;
+        case 'r':
+            OPT_FLAG_SET(prefs->flags, OPT_MAKE_RELAY, 1);
+            if (!argument)
+                break;
             parse_relay_address(prefs, argument);
-	    break;
-	case 'R':
-	    prefs->max_connections = atoi(argument);
-	    break;
-	case 's':
-	    OPT_FLAG_SET(prefs->flags, OPT_SEPARATE_DIRS, 0);
-	    break;
-	case 't':
-	    OPT_FLAG_SET(prefs->flags, OPT_KEEP_INCOMPLETE, 1);
-	    break;
-	case 'T':
-	    OPT_FLAG_SET(prefs->flags, OPT_TRUNCATE_DUPS, 1);
-	    break;
-	case 'u':
-g_strlcpy(prefs->useragent, argument, MAX_USERAGENT_STR);
-	    break;
-	case 'v':
-	    fputs(m_version_banner, stdout);
-	    exit(0);
-	case 'w':
-g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
-	    break;
-	case 'z':
-	    OPT_FLAG_SET(prefs->flags, OPT_SEARCH_PORTS, 0);
-	    prefs->max_port = prefs->relay_port+1000;
-	    break;
-	case '-':
-	    parse_extended_options (prefs, &option[2]);
-	    break;
-	}
+            break;
+        case 'R':
+            prefs->max_connections = atoi(argument);
+            break;
+        case 's':
+            OPT_FLAG_SET(prefs->flags, OPT_SEPARATE_DIRS, 0);
+            break;
+        case 't':
+            OPT_FLAG_SET(prefs->flags, OPT_KEEP_INCOMPLETE, 1);
+            break;
+        case 'T':
+            OPT_FLAG_SET(prefs->flags, OPT_TRUNCATE_DUPS, 1);
+            break;
+        case 'u':
+            g_strlcpy(prefs->useragent, argument, MAX_USERAGENT_STR);
+            break;
+        case 'v':
+            fputs(m_version_banner, stdout);
+            exit(0);
+        case 'w':
+            g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
+            break;
+        case 'z':
+            OPT_FLAG_SET(prefs->flags, OPT_SEARCH_PORTS, 0);
+            prefs->max_port = prefs->relay_port + 1000;
+            break;
+        case '-':
+            parse_extended_options(prefs, &option[2]);
+            break;
+        }
     }
 
     /* Need to verify that splitpoint rules were sane */
@@ -769,7 +790,7 @@ g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
         sr_console_printf(stderr, "--reload-rules requires --metadata-rules FILE and ICY metadata.\n");
         exit(EXIT_FAILURE);
     }
-    verify_splitpoint_rules (prefs);
+    verify_splitpoint_rules(prefs);
     if (prefs->wav) {
         OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 0);
         OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 0);
@@ -777,29 +798,30 @@ g_strlcpy(prefs->rules_file, argument, SR_MAX_PATH);
 
     /* Verify that first parameter is URL */
     if (argv[1][0] == '-') {
-	sr_console_printf(stderr, "*** The first parameter MUST be the URL\n\n");
-	exit(2);
+        sr_console_printf(stderr, "*** The first parameter MUST be the URL\n\n");
+        exit(2);
     }
 }
 
 static void
-parse_extended_options (STREAM_PREFS* prefs, const char* rule)
-{
-    int x,y;
+parse_extended_options(STREAM_PREFS* prefs, const char* rule) {
+    int x, y;
 
     /* Version */
-    if (!strcmp(rule,"version")) {
-	fputs(m_version_banner, stdout);
-	exit(0);
+    if (!strcmp(rule, "version")) {
+        fputs(m_version_banner, stdout);
+        exit(0);
     }
 
     /* Logging options */
     if (g_str_has_prefix(rule, "hls-variant=")) {
-        const char *value = rule + strlen("hls-variant=");
-        char *end;
+        const char* value = rule + strlen("hls-variant=");
+        char* end;
         gint64 bandwidth = g_ascii_strtoll(value, &end, 10);
-        if (!strcmp(value, "best")) prefs->hls_variant = 0;
-        else if (!strcmp(value, "worst")) prefs->hls_variant = -1;
+        if (!strcmp(value, "best"))
+            prefs->hls_variant = 0;
+        else if (!strcmp(value, "worst"))
+            prefs->hls_variant = -1;
         else if (*value && !*end && bandwidth > 0 && bandwidth <= G_MAXINT)
             prefs->hls_variant = (int)bandwidth;
         else {
@@ -816,17 +838,17 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
         prefs->metadata_log = TRUE;
         return;
     }
-    if (!strcmp(rule,"debug")) {
-	debug_enable();
-	return;
+    if (!strcmp(rule, "debug")) {
+        debug_enable();
+        return;
     }
-    if (!strcmp(rule,"stderr")) {
-	m_print_stderr = TRUE;
-	return;
+    if (!strcmp(rule, "stderr")) {
+        m_print_stderr = TRUE;
+        return;
     }
-    if (!strcmp(rule,"quiet")) {
-	m_dont_print = TRUE;
-	return;
+    if (!strcmp(rule, "quiet")) {
+        m_dont_print = TRUE;
+        return;
     }
 
     /* Splitpoint options */
@@ -835,14 +857,18 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
         return;
     }
     if (g_str_has_prefix(rule, "incomplete-min-duration=")) {
-        const char *value = rule + strlen("incomplete-min-duration=");
-        char *end;
+        const char* value = rule + strlen("incomplete-min-duration=");
+        char* end;
         guint64 amount, multiplier = 1000;
         errno = 0;
         amount = g_ascii_strtoull(value, &end, 10);
-        if (*end == 'm' && !end[1]) multiplier *= 60;
-        else if (*end == 'h' && !end[1]) multiplier *= 3600;
-        else if (*end && !(*end == 's' && !end[1])) multiplier = 0;
+        if (*end == 'm' && !end[1])
+            multiplier *= 60;
+        else if (*end == 'h' && !end[1])
+            multiplier *= 3600;
+        else
+            if (*end && !(*end == 's' && !end[1]))
+                multiplier = 0;
         if (!g_ascii_isdigit(*value) || errno == ERANGE || !multiplier ||
             amount > G_MAXUINT64 / multiplier) {
             sr_console_printf(stderr, "Invalid incomplete duration; use non-negative integer seconds, e.g. 30s, 10m, or 1h.\n");
@@ -868,7 +894,7 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
         return;
     }
     if (g_str_has_prefix(rule, "tls-ca-file=")) {
-        const char *path = rule + strlen("tls-ca-file=");
+        const char* path = rule + strlen("tls-ca-file=");
         if (!*path || g_strlcpy(prefs->tls_ca_file, path, sizeof(prefs->tls_ca_file)) >= sizeof(prefs->tls_ca_file)) {
             sr_console_printf(stderr, "Invalid CA file path.\n");
             exit(EXIT_FAILURE);
@@ -876,148 +902,147 @@ parse_extended_options (STREAM_PREFS* prefs, const char* rule)
         return;
     }
 
-    if ((!strcmp(rule,"xs-none"))
-	|| (!strcmp(rule,"xs_none"))) {
-	prefs->sp_opt.xs = 0;
-	debug_printf ("Disable silence detection");
-	return;
+    if ((!strcmp(rule, "xs-none"))
+        || (!strcmp(rule, "xs_none"))) {
+        prefs->sp_opt.xs = 0;
+        debug_printf("Disable silence detection");
+        return;
     }
-    if (!strcmp(rule,"xs2")) {
-	prefs->sp_opt.xs = 2;
-	debug_printf ("Setting xs2\n");
-	return;
+    if (!strcmp(rule, "xs2")) {
+        prefs->sp_opt.xs = 2;
+        debug_printf("Setting xs2\n");
+        return;
     }
-    if ((1==sscanf(rule,"xs-min-volume=%d",&x)) 
-	|| (1==sscanf(rule,"xs_min_volume=%d",&x))) {
-	prefs->sp_opt.xs_min_volume = x;
-	debug_printf ("Setting minimum volume to %d\n",x);
-	return;
+    if ((1 == sscanf(rule, "xs-min-volume=%d", &x))
+        || (1 == sscanf(rule, "xs_min_volume=%d", &x))) {
+        prefs->sp_opt.xs_min_volume = x;
+        debug_printf("Setting minimum volume to %d\n", x);
+        return;
     }
-    if ((1==sscanf(rule,"xs-silence-length=%d",&x))
-	|| (1==sscanf(rule,"xs_silence_length=%d",&x))) {
-	prefs->sp_opt.xs_silence_length = x;
-	debug_printf ("Setting silence length to %d\n",x);
-	return;
+    if ((1 == sscanf(rule, "xs-silence-length=%d", &x))
+        || (1 == sscanf(rule, "xs_silence_length=%d", &x))) {
+        prefs->sp_opt.xs_silence_length = x;
+        debug_printf("Setting silence length to %d\n", x);
+        return;
     }
-    if ((2==sscanf(rule,"xs-search-window=%d:%d",&x,&y))
-	|| (2==sscanf(rule,"xs_search_window=%d:%d",&x,&y))) {
-	prefs->sp_opt.xs_search_window_1 = x;
-	prefs->sp_opt.xs_search_window_2 = y;
-	debug_printf ("Setting search window to (%d:%d)\n",x,y);
-	return;
+    if ((2 == sscanf(rule, "xs-search-window=%d:%d", &x, &y))
+        || (2 == sscanf(rule, "xs_search_window=%d:%d", &x, &y))) {
+        prefs->sp_opt.xs_search_window_1 = x;
+        prefs->sp_opt.xs_search_window_2 = y;
+        debug_printf("Setting search window to (%d:%d)\n", x, y);
+        return;
     }
-    if ((1==sscanf(rule,"xs-offset=%d",&x))
-	|| (1==sscanf(rule,"xs_offset=%d",&x))) {
-	prefs->sp_opt.xs_offset = x;
-	debug_printf ("Setting silence offset to %d\n",x);
-	return;
+    if ((1 == sscanf(rule, "xs-offset=%d", &x))
+        || (1 == sscanf(rule, "xs_offset=%d", &x))) {
+        prefs->sp_opt.xs_offset = x;
+        debug_printf("Setting silence offset to %d\n", x);
+        return;
     }
-    if ((2==sscanf(rule,"xs-padding=%d:%d",&x,&y))
-	|| (2==sscanf(rule,"xs_padding=%d:%d",&x,&y))) {
-	prefs->sp_opt.xs_padding_1 = x;
-	prefs->sp_opt.xs_padding_2 = y;
-	debug_printf ("Setting file output padding to (%d:%d)\n",x,y);
-	return;
+    if ((2 == sscanf(rule, "xs-padding=%d:%d", &x, &y))
+        || (2 == sscanf(rule, "xs_padding=%d:%d", &x, &y))) {
+        prefs->sp_opt.xs_padding_1 = x;
+        prefs->sp_opt.xs_padding_2 = y;
+        debug_printf("Setting file output padding to (%d:%d)\n", x, y);
+        return;
     }
 
     /* id3 options */
-    if (!strcmp(rule,"with-id3v2")) {
-	OPT_FLAG_SET(prefs->flags,OPT_ADD_ID3V2,1);
-	return;
+    if (!strcmp(rule, "with-id3v2")) {
+        OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 1);
+        return;
     }
-    if (!strcmp(rule,"without-id3v2")) {
-	OPT_FLAG_SET(prefs->flags,OPT_ADD_ID3V2,0);
-	return;
+    if (!strcmp(rule, "without-id3v2")) {
+        OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V2, 0);
+        return;
     }
-    if (!strcmp(rule,"with-id3v1")) {
-	OPT_FLAG_SET(prefs->flags,OPT_ADD_ID3V1,1);
-	return;
+    if (!strcmp(rule, "with-id3v1")) {
+        OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 1);
+        return;
     }
-    if (!strcmp(rule,"without-id3v1")) {
-	OPT_FLAG_SET(prefs->flags,OPT_ADD_ID3V1,0);
-	return;
+    if (!strcmp(rule, "without-id3v1")) {
+        OPT_FLAG_SET(prefs->flags, OPT_ADD_ID3V1, 0);
+        return;
     }
 
     /* codeset options */
     x = strlen("codeset-filesys=");
-    if (!strncmp(rule,"codeset-filesys=",x)) {
-g_strlcpy (prefs->cs_opt.codeset_filesys, &rule[x], MAX_CODESET_STRING);
-	debug_printf ("Setting filesys codeset to %s\n",
-		      prefs->cs_opt.codeset_filesys);
-	return;
+    if (!strncmp(rule, "codeset-filesys=", x)) {
+        g_strlcpy(prefs->cs_opt.codeset_filesys, &rule[x], MAX_CODESET_STRING);
+        debug_printf("Setting filesys codeset to %s\n",
+                     prefs->cs_opt.codeset_filesys);
+        return;
     }
     x = strlen("codeset-id3=");
-    if (!strncmp(rule,"codeset-id3=",x)) {
-g_strlcpy (prefs->cs_opt.codeset_id3, &rule[x], MAX_CODESET_STRING);
-	debug_printf ("Setting id3 codeset to %s\n",
-		      prefs->cs_opt.codeset_id3);
-	return;
+    if (!strncmp(rule, "codeset-id3=", x)) {
+        g_strlcpy(prefs->cs_opt.codeset_id3, &rule[x], MAX_CODESET_STRING);
+        debug_printf("Setting id3 codeset to %s\n",
+                     prefs->cs_opt.codeset_id3);
+        return;
     }
     x = strlen("codeset-metadata=");
-    if (!strncmp(rule,"codeset-metadata=",x)) {
-g_strlcpy (prefs->cs_opt.codeset_metadata, &rule[x], MAX_CODESET_STRING);
-	debug_printf ("Setting metadata codeset to %s\n",
-		      prefs->cs_opt.codeset_metadata);
-	return;
+    if (!strncmp(rule, "codeset-metadata=", x)) {
+        g_strlcpy(prefs->cs_opt.codeset_metadata, &rule[x], MAX_CODESET_STRING);
+        debug_printf("Setting metadata codeset to %s\n",
+                     prefs->cs_opt.codeset_metadata);
+        return;
     }
     x = strlen("codeset-relay=");
-    if (!strncmp(rule,"codeset-relay=",x)) {
-g_strlcpy (prefs->cs_opt.codeset_relay, &rule[x], MAX_CODESET_STRING);
-	debug_printf ("Setting relay codeset to %s\n",
-		      prefs->cs_opt.codeset_relay);
-	return;
+    if (!strncmp(rule, "codeset-relay=", x)) {
+        g_strlcpy(prefs->cs_opt.codeset_relay, &rule[x], MAX_CODESET_STRING);
+        debug_printf("Setting relay codeset to %s\n",
+                     prefs->cs_opt.codeset_relay);
+        return;
     }
 
     /* All rules failed */
     sr_console_printf(stderr, "Can't parse command option: --%s\n", rule);
-    exit (-1);
+    exit(-1);
 }
 
 static void
-verify_splitpoint_rules (STREAM_PREFS *prefs)
-{
+verify_splitpoint_rules(STREAM_PREFS* prefs) {
 #if defined (commentout)
-    /* This is still not complete, but the warning causes people to 
+    /* This is still not complete, but the warning causes people to
        wonder what is going on. */
     sr_console_printf(stderr, "Warning: splitpoint sanity check not yet complete.\n");
 #endif
-    
+
     /* xs_silence_length must be non-negative and divisible by two */
     if (prefs->sp_opt.xs_silence_length < 0) {
-	prefs->sp_opt.xs_silence_length = 0;
+        prefs->sp_opt.xs_silence_length = 0;
     }
     if (prefs->sp_opt.xs_silence_length % 2) {
-        prefs->sp_opt.xs_silence_length ++;
+        prefs->sp_opt.xs_silence_length++;
     }
 
     /* search_window values must be non-negative */
     if (prefs->sp_opt.xs_search_window_1 < 0) {
-	prefs->sp_opt.xs_search_window_1 = 0;
+        prefs->sp_opt.xs_search_window_1 = 0;
     }
     if (prefs->sp_opt.xs_search_window_2 < 0) {
-	prefs->sp_opt.xs_search_window_2 = 0;
+        prefs->sp_opt.xs_search_window_2 = 0;
     }
 
     /* if silence_length is 0, then search window should be zero */
     if (prefs->sp_opt.xs_silence_length == 0) {
-	prefs->sp_opt.xs_search_window_1 = 0;
-	prefs->sp_opt.xs_search_window_2 = 0;
+        prefs->sp_opt.xs_search_window_1 = 0;
+        prefs->sp_opt.xs_search_window_2 = 0;
     }
 
     /* search_window values must be longer than silence_length */
     if (prefs->sp_opt.xs_search_window_1 + prefs->sp_opt.xs_search_window_2
-	    < prefs->sp_opt.xs_silence_length) {
-	/* if this happens, disable search */
-	prefs->sp_opt.xs_search_window_1 = 0;
-	prefs->sp_opt.xs_search_window_2 = 0;
-	prefs->sp_opt.xs_silence_length = 0;
+        < prefs->sp_opt.xs_silence_length) {
+        /* if this happens, disable search */
+        prefs->sp_opt.xs_search_window_1 = 0;
+        prefs->sp_opt.xs_search_window_2 = 0;
+        prefs->sp_opt.xs_silence_length = 0;
     }
 
     /* search window lengths must be at least 1/2 of silence_length */
     if (prefs->sp_opt.xs_search_window_1 < prefs->sp_opt.xs_silence_length) {
-	prefs->sp_opt.xs_search_window_1 = prefs->sp_opt.xs_silence_length;
+        prefs->sp_opt.xs_search_window_1 = prefs->sp_opt.xs_silence_length;
     }
     if (prefs->sp_opt.xs_search_window_2 < prefs->sp_opt.xs_silence_length) {
-	prefs->sp_opt.xs_search_window_2 = prefs->sp_opt.xs_silence_length;
+        prefs->sp_opt.xs_search_window_2 = prefs->sp_opt.xs_silence_length;
     }
 }
