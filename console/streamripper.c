@@ -236,7 +236,7 @@ print_status (RIP_MANAGER_INFO *rmi)
 	    if (buffering_tick == 5)
 		buffering_tick = 0;
 
-	    sprintf(status_str,"buffering - %c ",
+	    sprintf(status_str,"buffering - %c",
 		    m_buffer_chars[buffering_tick]);
 
             sr_console_status(m_print_stderr ? stderr : stdout, status_str,
@@ -245,11 +245,11 @@ print_status (RIP_MANAGER_INFO *rmi)
 
 	case RM_STATUS_RIPPING:
 	    if (rmi->callback_filtered) {
-		strcpy(status_str, "filtered...   ");
+		strcpy(status_str, "filtered");
 	    } else if (rmi->callback_incomplete) {
-		strcpy(status_str, "incomplete... ");
+		strcpy(status_str, "incomplete");
 	    } else {
-		strcpy(status_str, "ripping...    ");
+		strcpy(status_str, "ripping");
 	    }
             if (!rmi->callback_duration_known) {
                 guint64 bytes = rmi->callback_filesize;
@@ -275,7 +275,7 @@ print_status (RIP_MANAGER_INFO *rmi)
                               rmi->callback_filename, duration_str);
 	    break;
 	case RM_STATUS_RECONNECTING:
-	    strcpy(status_str, "re-connecting..");
+	    strcpy(status_str, "re-connecting");
             sr_console_status(m_print_stderr ? stderr : stdout, status_str, "", NULL);
 	    break;
 	}
@@ -324,7 +324,7 @@ print_status (RIP_MANAGER_INFO *rmi)
             } else {
                 print_to_console("relay port: %u\n", prefs->relay_port);
             }
-	    print_to_console ("[%14s]\r", "getting track name... ");
+	    print_to_console ("[%-13s]\r", "getting track name");
 	}
 
 	printed_fullinfo = TRUE;

@@ -116,7 +116,7 @@ with tempfile.TemporaryDirectory(prefix='streamripper-https-') as tmp:
         output = result.stdout.decode('utf-8', errors='replace') + result.stderr.decode('utf-8', errors='replace')
         files = list(dest.rglob('*.mp3')) if dest.exists() else []
         if expected:
-            assert result.returncode == 0 and '[ripping...' in output and 'Příliš žluťoučký kůň' in output, (name, output[-3000:])
+            assert result.returncode == 0 and '[ripping ' in output and 'Příliš žluťoučký kůň' in output, (name, output[-3000:])
             assert any('Příliš žluťoučký kůň' in path.name and path.stat().st_size > 16000 for path in files), (name, files, output[-1000:])
             assert any('Další píseň' in path.name and path.stat().st_size > 16000 for path in files), (name, files)
             assert any('Příliš žluťoučký kůň' in path.name and path.parent.name != 'incomplete' for path in files), (name, files)

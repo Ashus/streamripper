@@ -21,21 +21,21 @@ int main(void)
         FILE *capture = tmpfile();
         long first;
         if (!capture) return 13;
-        sr_console_status(capture, "ripping...", "Track", "00:01");
+        sr_console_status(capture, "ripping", "Track", "00:01");
         first = ftell(capture);
-        sr_console_status(capture, "ripping...", "Track", "00:01");
+        sr_console_status(capture, "ripping", "Track", "00:01");
         if (ftell(capture) != first) return 14;
-        sr_console_status(capture, "ripping...", "Track", "00:02");
+        sr_console_status(capture, "ripping", "Track", "00:02");
         if (ftell(capture) <= first) return 15;
         first = ftell(capture);
-        sr_console_status(capture, "filtered...", "Track", "00:02");
+        sr_console_status(capture, "filtered", "Track", "00:02");
         if (ftell(capture) <= first) return 16;
         first = ftell(capture);
-        sr_console_status(capture, "filtered...", "Next track", "00:02");
+        sr_console_status(capture, "filtered", "Next track", "00:02");
         if (ftell(capture) <= first) return 17;
         sr_console_printf(capture, "\n");
         first = ftell(capture);
-        sr_console_status(capture, "filtered...", "Next track", "00:02");
+        sr_console_status(capture, "filtered", "Next track", "00:02");
         if (ftell(capture) <= first) return 18;
         fclose(capture);
     }
@@ -63,15 +63,15 @@ int main(void)
             if (!SetConsoleScreenBufferSize(buffer, size) ||
                 !SetConsoleWindowInfo(buffer, TRUE, &window) ||
                 !SetConsoleCursorPosition(buffer, start)) return 6;
-            sr_console_status(stream, "ripping...    ", long_title, "01:23");
+            sr_console_status(stream, "ripping", long_title, "01:23");
             if (!ReadConsoleOutputCharacterW(buffer, actual, 120, start, &count)) return 7;
             actual[119] = 0;
             if (!wcsstr(actual, L"ENDMARK")) return 8;
             window.Right = 39;
             if (!SetConsoleWindowInfo(buffer, TRUE, &window)) return 9;
-            sr_console_status(stream, "ripping...    ", "Short", "01:23");
+            sr_console_status(stream, "ripping", "Short", "01:23");
             if (!ReadConsoleOutputCharacterW(buffer, actual, 40, start, &count)) return 10;
-            for (size_t cell = 33; cell < 40; cell++) if (actual[cell] != L' ') return 11;
+            for (size_t cell = 32; cell < 40; cell++) if (actual[cell] != L' ') return 11;
             {
                 CONSOLE_SCREEN_BUFFER_INFO info;
                 if (!GetConsoleScreenBufferInfo(buffer, &info) || info.dwCursorPosition.Y != 0) return 12;

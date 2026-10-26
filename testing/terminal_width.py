@@ -70,7 +70,7 @@ try:
             wide = frame_until(lambda text: "ENDMARK" in text)
             assert columns(wide) <= 119
             resize(60)
-            narrow = frame_until(lambda text: "ripping..." in text and "ENDMARK" not in text
+            narrow = frame_until(lambda text: "ripping" in text and "ENDMARK" not in text
                                  and columns(text) <= 59 and re.search(r"\[\s*\d{2}:\d{2}\]$", text))
             assert columns(narrow) <= 59
             resize(120)

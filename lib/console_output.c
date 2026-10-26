@@ -54,9 +54,9 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
     static guint64 previous_generation;
     int columns = console_columns(stream), used;
     char *suffix = detail ? g_strdup_printf(" [%8s]", detail) : g_strdup("");
-    int budget = columns ? MAX(0, columns - 1 - 17 - (int)strlen(suffix)) : 50;
+    int budget = columns ? MAX(0, columns - 1 - 16 - (int)strlen(suffix)) : 50;
     char *name = fit_columns(title, budget, &used);
-    char *line = g_strdup_printf("[%14s] %s%s", status, name, suffix);
+    char *line = g_strdup_printf("[%-13s] %s%s", status, name, suffix);
     /* Data callbacks can repeat within the same displayed second. */
     if (previous_stream == stream && previous_columns == columns &&
         previous_generation == console_write_generation &&
