@@ -38,7 +38,7 @@ static char *fit_columns(const char *text, int budget, int *columns)
         int width;
         if (g_unichar_iscntrl(c)) c = ' ';
         width = g_unichar_iszerowidth(c) ? 0 : g_unichar_iswide(c) ? 2 : 1;
-        if (*columns + width > budget) break;
+        if (budget >= 0 && *columns + width > budget) break;
         g_string_append_unichar(result, c);
         *columns += width;
     }
@@ -54,7 +54,8 @@ void sr_console_status(FILE *stream, const char *status, const char *title, cons
     static guint64 previous_generation;
     int columns = console_columns(stream), used;
     char *suffix = detail ? g_strdup_printf(" [%8s]", detail) : g_strdup("");
-    int budget = columns ? MAX(0, columns - 1 - 16 - (int)strlen(suffix)) : 50;
+    /* Pipes and files have no display width limit. */
+    int budget = columns ? MAX(0, columns - 1 - 16 - (int)strlen(suffix)) : -1;
     char *name = fit_columns(title, budget, &used);
     char *line = g_strdup_printf("[%-13s] %s%s", status, name, suffix);
     /* Data callbacks can repeat within the same displayed second. */

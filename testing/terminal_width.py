@@ -19,7 +19,7 @@ import unicodedata
 repo = Path(__file__).resolve().parents[1]
 exe = Path(sys.argv[1]).resolve()
 audio = (repo / "build/sample-5s.mp3").read_bytes()
-title = "Artist - " + "A" * 55 + "e\u0301界-ENDMARK"
+title = "Artist - " + "A" * 55 + "Příliš-e\u0301界🎵-ENDMARK"
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args): pass
@@ -64,6 +64,18 @@ try:
     with tempfile.TemporaryDirectory(prefix="terminal-width-") as tmp:
         args = [str(exe), f"http://127.0.0.1:{server.server_port}/", "-c", "-s",
                 "-k", "0", "--xs-none", "-d", tmp]
+        for destination in ("pipe", "file"):
+            redirected_args = args[:-1] + [str(Path(tmp) / destination), "-l", "1"]
+            with tempfile.TemporaryFile() as capture:
+                result = subprocess.run(redirected_args,
+                    stdout=subprocess.PIPE if destination == "pipe" else capture,
+                    stderr=subprocess.PIPE, timeout=10, check=True)
+                capture.seek(0)
+                output = result.stdout if destination == "pipe" else capture.read()
+            frames = [frame for frame in output.split(b"\r") if frame.startswith(b"[ripping ")]
+            assert frames and all(title in frame.decode("utf-8") for frame in frames), output
+            assert b"\x1b[K" not in output
+        print("PASS: complete Unicode titles and CR status frames in pipes and files")
         resize(120)
         process = subprocess.Popen(args, stdout=slave, stderr=subprocess.PIPE)
         try:
@@ -74,7 +86,7 @@ try:
                                  and columns(text) <= 59 and re.search(r"\[\s*\d{2}:\d{2}\]$", text))
             assert columns(narrow) <= 59
             resize(120)
-            assert "e\u0301界-ENDMARK" in frame_until(lambda text: "ENDMARK" in text)
+            assert "Příliš-e\u0301界🎵-ENDMARK" in frame_until(lambda text: "ENDMARK" in text)
             process.send_signal(signal.SIGTERM)
             process.wait(timeout=5)
             assert process.returncode == 0

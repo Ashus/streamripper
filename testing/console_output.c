@@ -17,6 +17,21 @@ int main(void)
     size_t i;
     const char *title = "Mirar - N\xc3\xa4r Solen G\xc3\xa5r Ned";
     const WCHAR expected[] = L"Mirar - N\u00e4r Solen G\u00e5r Ned";
+    const char *long_title = "012345678901234567890123456789012345678901234567890123456789-"
+        "P\xc5\x99\xc3\xadli\xc5\xa1-\xe7\x95\x8c-e\xcc\x81-\xf0\x9f\x8e\xb5-ENDMARK";
+    {
+        FILE *capture = tmpfile();
+        char actual_line[512];
+        char *expected_line = g_strdup_printf("[%-13s] %s [%8s]\r", "ripping", long_title, "00:01");
+        if (!capture) return 19;
+        sr_console_status(capture, "ripping", long_title, "00:01");
+        sr_console_status(capture, "ripping", long_title, "00:01");
+        if (fseek(capture, 0, SEEK_SET) != 0) return 23;
+        size_t length = fread(actual_line, 1, sizeof(actual_line), capture);
+        if (length != strlen(expected_line) || memcmp(actual_line, expected_line, length) != 0) return 20;
+        g_free(expected_line);
+        if (fclose(capture) != 0) return 24;
+    }
     {
         FILE *capture = tmpfile();
         long first;
@@ -59,7 +74,6 @@ int main(void)
         {
             COORD size = {240, 300};
             SMALL_RECT window = {0, 0, 119, 9};
-            const char *long_title = "0123456789012345678901234567890123456789012345678901234567890123456789-ENDMARK";
             if (!SetConsoleScreenBufferSize(buffer, size) ||
                 !SetConsoleWindowInfo(buffer, TRUE, &window) ||
                 !SetConsoleCursorPosition(buffer, start)) return 6;
@@ -69,6 +83,12 @@ int main(void)
             if (!wcsstr(actual, L"ENDMARK")) return 8;
             window.Right = 39;
             if (!SetConsoleWindowInfo(buffer, TRUE, &window)) return 9;
+            sr_console_status(stream, "ripping", long_title, "01:23");
+            if (!ReadConsoleOutputCharacterW(buffer, actual, 40, start, &count)) return 21;
+            actual[39] = 0;
+            const WCHAR marker[] = {'E', 'N', 'D', 'M', 'A', 'R', 'K', 0};
+            const WCHAR duration[] = {'0', '1', ':', '2', '3', 0};
+            if (wcsstr(actual, marker) || !wcsstr(actual, duration)) return 22;
             sr_console_status(stream, "ripping", "Short", "01:23");
             if (!ReadConsoleOutputCharacterW(buffer, actual, 40, start, &count)) return 10;
             for (size_t cell = 32; cell < 40; cell++) if (actual[cell] != L' ') return 11;
@@ -81,5 +101,9 @@ int main(void)
     }
     sr_console_printf(stdout, "%s\n", title);
     sr_console_printf(stderr, "%s\n", title);
+    sr_console_status(stdout, "ripping", long_title, "00:01");
+    sr_console_status(stdout, "ripping", long_title, "00:01");
+    sr_console_status(stderr, "ripping", long_title, "00:01");
+    sr_console_status(stderr, "ripping", long_title, "00:01");
     return 0;
 }
