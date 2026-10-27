@@ -468,6 +468,8 @@ socklib_read_header(RIP_MANAGER_INFO* rmi, HSOCKET* socket_handle,
     int ret;
     char* t;
 
+    if (!buffer || size < 5)
+        return SR_ERROR_INVALID_PARAM;
     if (socket_handle->closed)
         return SR_ERROR_SOCKET_CLOSED;
 
@@ -478,7 +480,8 @@ socklib_read_header(RIP_MANAGER_INFO* rmi, HSOCKET* socket_handle,
 #endif
 
     memset(buffer, 0, size);
-    for (i = 0; i < size; i++) {
+    /* Keep the final byte zero even when a response fills the buffer. */
+    for (i = 0; i < size - 1; i++) {
         ret = socklib_recvall(rmi, socket_handle, &buffer[i], 1, 0);
         if (ret < 0) {
             return ret;
@@ -498,16 +501,18 @@ socklib_read_header(RIP_MANAGER_INFO* rmi, HSOCKET* socket_handle,
             continue;
 #endif
 
-        t = buffer + (i > 3 ? i - 3 : i);
+        if (i < 3)
+            continue;
+        t = buffer + i - 3;
 
-        if (strncmp(t, "\r\n\r\n", 4) == 0)
+        if (memcmp(t, "\r\n\r\n", 4) == 0)
             break;
         /* Allegedly live365 used to do this */
-        if (strncmp(t, "\n\0\r\n", 4) == 0)
+        if (memcmp(t, "\n\0\r\n", 4) == 0)
             break;
     }
 
-    if (i == size) {
+    if (i == size - 1) {
         debug_printf("http header:\n%s\n", buffer);
         return SR_ERROR_NO_HTTP_HEADER;
     }

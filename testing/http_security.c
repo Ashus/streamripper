@@ -71,6 +71,10 @@ static void oversized_headers(void) {
         CHECK(strspn(result.header.server, "A") == strlen(result.header.server));
         g_free(text);
 
+        text = g_strdup_printf("HTTP/1.0 200 OK\r\nContent-Type: %s\r\nicy-br: %s\r\n\r\n", value, value);
+        parse_header(text, &result);
+        g_free(text);
+
         text = g_strdup_printf("HTTP/1.0 200 OK\r\nContent-Type: audio/mpeg\r\nServer: Zwitterion v%s<\r\n\r\n", value);
         parse_header(text, &result);
         CHECK(g_str_has_prefix(result.header.server, "Zwitterion v"));
@@ -143,6 +147,11 @@ int main(int argc, char** argv) {
     if (argc == 3 && !strcmp(argv[1], "--connect"))
         return connect_once(argv[2]);
     CHECK(argc == 1);
+    HSOCKET invalid = {0};
+    char tiny[5];
+    CHECK(socklib_read_header(NULL, &invalid, NULL, sizeof(tiny)) == SR_ERROR_INVALID_PARAM);
+    for (int size = -1; size < 5; size++)
+        CHECK(socklib_read_header(NULL, &invalid, tiny, size) == SR_ERROR_INVALID_PARAM);
     for (int cycle = 0; cycle < 100; cycle++) {
         server_versions();
         oversized_headers();

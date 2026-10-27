@@ -16,6 +16,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path.startswith(("/header/", "/embedded/")):
+            size = int(self.path.rsplit("/", 1)[1])
+            prefix = b"HTTP/1.0 200 OK\r\nContent-Type: audio/mpeg\r\nX-Long: "
+            end = b"\n\0\r\n" if self.path.startswith("/embedded/") else b"\r\n\r\n"
+            response = prefix + b"A" * (size - len(prefix) - len(end)) + end
+            assert len(response) == size
+            self.close_connection = True
+            try:
+                self.wfile.write(response)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         if self.path.startswith("/sink/"):
             redirects.append(self.path)
             content = b""
@@ -39,6 +51,14 @@ thread = threading.Thread(target=server.serve_forever, daemon=True)
 thread.start()
 base = f"http://127.0.0.1:{server.server_port}"
 try:
+    for terminator in ("header", "embedded"):
+        for size in (128, 8190, 8191, 8192, 20000):
+            result = subprocess.run([str(exe), "--connect", f"{base}/{terminator}/{size}"],
+                                    capture_output=True, text=True, timeout=10)
+            assert result.returncode == (0 if size < 8192 else 1), (size, result)
+            assert "HTTP result:" in result.stdout, (size, result)
+            assert "AddressSanitizer" not in result.stderr and "runtime error:" not in result.stderr, result.stderr
+    print("PASS: exact network header limits, embedded-NUL terminator and oversized response rejection")
     for kind in ("pls", "m3u"):
         for size in (0, 510, 511, 512, 1023, 4096, 8200, 20000):
             target = base + "/sink/" + "A" * size
@@ -57,7 +77,15 @@ try:
                 assert len(base + redirects[0]) <= 511, (kind, size, redirects)
             else:
                 assert not redirects, (kind, size, redirects)
-    print("PASS: PLS/M3U long entries, bounded redirects and rejection of oversized playlists")
+    for size in (512, 4096, 20000):
+        payload = f"[playlist]\nFile1={base}/sink/\nTitle1={('A' * size)}\n".encode("ascii")
+        redirects.clear()
+        result = subprocess.run([str(exe), "--connect", f"{base}/case.pls"],
+                                capture_output=True, text=True, timeout=10)
+        assert result.returncode == (0 if len(payload) < 8192 else 1), (size, result)
+        assert "HTTP result:" in result.stdout, (size, result)
+        assert "AddressSanitizer" not in result.stderr and "runtime error:" not in result.stderr, result.stderr
+    print("PASS: PLS/M3U long entries/titles, bounded redirects and rejection of oversized playlists")
 finally:
     server.shutdown()
     server.server_close()
