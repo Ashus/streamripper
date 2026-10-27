@@ -121,14 +121,17 @@ ripstream_mp3_rip(RIP_MANAGER_INFO* rmi) {
     rc = ripstream_get_data(rmi, node->data, rmi->current_track.raw_metadata);
     if (rc != SR_SUCCESS) {
         debug_printf("get_stream_data bad return code: %d\n", rc);
+        cbuf3_insert_free_node(cbuf3, node);
         return rc;
     }
 
     /* If first time through, check the bitrate in the stream. */
     if (rmi->ripstream_first_time_through) {
         rc = ripstream_mp3_check_bitrate(rmi);
-        if (rc != SR_SUCCESS)
+        if (rc != SR_SUCCESS) {
+            cbuf3_insert_free_node(cbuf3, node);
             return rc;
+        }
     }
 
     /* A rules change must also re-evaluate a title followed by empty ICY blocks. */

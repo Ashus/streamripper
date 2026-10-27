@@ -361,7 +361,7 @@ cbuf3_pointer_copy(
     struct cbuf3_pointer* out_ptr,
     struct cbuf3_pointer* in_ptr) {
     out_ptr->node = in_ptr->node;
-    out_ptr->offset = out_ptr->offset;
+    out_ptr->offset = in_ptr->offset;
 }
 
 error_code

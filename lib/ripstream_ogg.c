@@ -55,7 +55,7 @@ ripstream_ogg_handle_bos(
             error_code rc;
 
             if (rmi->ogg_track_state == 2) {
-                Writer* writer = (Writer*)g_queue_pop_head(write_list);
+                Writer* writer = (Writer*)g_queue_peek_head(write_list);
 
                 debug_printf("ripstream_ogg_handle_bos: ending track\n");
 
@@ -66,6 +66,7 @@ ripstream_ogg_handle_bos(
                 }
 
                 /* Free up writer */
+                g_queue_pop_head(write_list);
                 free(writer);
             }
 
@@ -211,6 +212,7 @@ ripstream_ogg_rip(RIP_MANAGER_INFO* rmi) {
     rc = ripstream_get_data(rmi, node->data, rmi->current_track.raw_metadata);
     if (rc != SR_SUCCESS) {
         debug_printf("get_stream_data bad return code: %d\n", rc);
+        cbuf3_insert_free_node(cbuf3, node);
         return rc;
     }
 
