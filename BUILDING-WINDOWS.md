@@ -81,6 +81,11 @@ package-windows.cmd C:\msys64\mingw64
 ```
 
 CMake generates `build`; Ninja compiles the CLI and regression executable.
+After linking, CMake copies the required toolchain DLLs beside `streamripper.exe`,
+including their transitive dependencies. This also applies to the Rider presets
+in `build/rider-release` and `build/rider-debug`, so the executable can run without
+adding the toolchain to the runtime `PATH`. Use the packaging command below for
+distribution with the complete license notices and documentation.
 `package-windows.cmd` prepares `dist`, calls 7-Zip, tests the archive, and writes
 its SHA-256 checksum. The Python helper resolves runtime DLLs recursively from PE import tables and copies
 their licenses, linked runtime notices, documentation, and metadata. It checks that

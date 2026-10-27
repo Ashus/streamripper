@@ -18,6 +18,16 @@ add_executable(streamripper console/streamripper.c)
 target_compile_features(streamripper PRIVATE c_std_99)
 target_compile_options(streamripper PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare)
 target_link_libraries(streamripper PRIVATE streamripper1)
+get_filename_component(SR_RUNTIME_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+add_custom_command(TARGET streamripper POST_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSR_EXECUTABLE=$<TARGET_FILE:streamripper>"
+        "-DSR_RUNTIME_DIR=${SR_RUNTIME_DIR}"
+        "-DSR_OBJDUMP=${CMAKE_OBJDUMP}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CopyWindowsRuntime.cmake"
+    VERBATIM)
+set_property(TARGET streamripper APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_SOURCE_DIR}/cmake/CopyWindowsRuntime.cmake")
 install(TARGETS streamripper RUNTIME DESTINATION .)
 include(CTest)
 if(BUILD_TESTING)
