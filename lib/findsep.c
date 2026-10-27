@@ -645,8 +645,9 @@ output(void* data, struct mad_header const* header,
         }
 
         // get the instantanous volume
-        v = (ds->prev_sample * ds->prev_sample) + (sample * sample);
-        v = sqrt(v / 2);
+        gint64 mean_square = ((gint64)ds->prev_sample * ds->prev_sample
+                              + (gint64)sample * sample) / 2;
+        v = sqrt((double)mean_square);
         if (ds->pcmpos > ds->len_to_sw_start_samp
             && ds->pcmpos < ds->len_to_sw_end_samp) {
             search_for_silence(ds, v);
