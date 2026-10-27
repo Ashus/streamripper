@@ -778,11 +778,10 @@ http_parse_sc_header(const char* url, char* header, SR_HTTP_HEADER* info) {
     }
     // Check for Shoutcast
     else if ((start = (char*)strstr(header, "SHOUTcast")) != NULL) {
-        strcpy(info->server, "SHOUTcast/");
-        if ((start = (char*)strstr(start, "Server/")) != NULL) {
-            sscanf(start, "Server/%63[^<]<", versionbuf);
-            strcat(info->server, versionbuf);
-        }
+        g_strlcpy(info->server, "SHOUTcast/", sizeof(info->server));
+        if ((start = (char*)strstr(start, "Server/")) != NULL &&
+            sscanf(start + strlen("Server/"), "%63[^<\r\n]", versionbuf) == 1)
+            g_strlcat(info->server, versionbuf, sizeof(info->server));
     }
     // Check for Icecast 2
     else if ((start = (char*)strstr(header, "Icecast 2")) != NULL) {
@@ -799,11 +798,10 @@ http_parse_sc_header(const char* url, char* header, SR_HTTP_HEADER* info) {
     // Check for Icecast 1
     else if ((start = (char*)strstr(header, "icecast")) != NULL) {
         if (!info->server[0]) {
-            strcpy(info->server, "icecast/");
-            if ((start = (char*)strstr(start, "version ")) != NULL) {
-                sscanf(start, "version %63[^<]<", versionbuf);
-                strcat(info->server, versionbuf);
-            }
+            g_strlcpy(info->server, "icecast/", sizeof(info->server));
+            if ((start = (char*)strstr(start, "version ")) != NULL &&
+                sscanf(start + strlen("version "), "%63[^<\r\n]", versionbuf) == 1)
+                g_strlcat(info->server, versionbuf, sizeof(info->server));
         }
 
         // icecast 1.x headers.

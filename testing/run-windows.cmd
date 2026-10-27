@@ -7,6 +7,8 @@ set "PATH=%SR_TOOLCHAIN%\bin;%PATH%"
 pushd "%~dp0.."
 ctest --test-dir build --output-on-failure
 if errorlevel 1 goto failed
+python testing\http_security.py build\http_security_regression.exe
+if errorlevel 1 goto failed
 python testing\cli_options.py
 if errorlevel 1 goto failed
 python testing\console_output.py
