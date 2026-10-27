@@ -47,7 +47,7 @@ def main():
     if binary[:6] != b'\x7fELF\x02\x01' or binary[18:20] != b'\x3e\x00':
         raise RuntimeError('The built executable is not a little-endian amd64 ELF binary.')
     output.mkdir(parents=True, exist_ok=True)
-    filename = 'streamripper_' + version + '-1_amd64.deb'
+    filename = 'streamripper-ng_' + version + '-1_amd64.deb'
     package = output / filename
     checksum = package.with_suffix('.deb.sha256')
     # CPack leaves a sizeable _CPack_Packages tree, including on failure.
@@ -60,9 +60,11 @@ def main():
         if not staged_package.is_file():
             raise RuntimeError('CPack did not produce the expected package: ' + str(staged_package))
         metadata = subprocess.check_output(
-            ['dpkg-deb', '--field', str(staged_package), 'Package', 'Version', 'Architecture'],
+            ['dpkg-deb', '--field', str(staged_package), 'Package', 'Version', 'Architecture',
+             'Conflicts', 'Replaces', 'Provides'],
             text=True)
-        expected = {'Package': 'streamripper', 'Version': version + '-1', 'Architecture': 'amd64'}
+        expected = {'Package': 'streamripper-ng', 'Version': version + '-1', 'Architecture': 'amd64',
+                    'Conflicts': 'streamripper', 'Replaces': 'streamripper'}
         fields = dict(line.split(': ', 1) for line in metadata.splitlines())
         if fields != expected:
             raise RuntimeError('Unexpected DEB metadata: ' + metadata)

@@ -25,6 +25,7 @@ with tempfile.TemporaryDirectory(prefix='verify-release-', dir=archive.parent) a
         assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, relative
         listed.add(relative)
     actual = {path.relative_to(dest).as_posix() for path in dest.rglob('*') if path.is_file()}
+    assert not any(Path(name).name.startswith('BUILDING') for name in actual), actual
     assert actual == listed | {'SHA256SUMS'}, actual ^ (listed | {'SHA256SUMS'})
     version = (dest / 'VERSION').read_text().strip()
     assert json.loads((dest / 'build-info.json').read_text())['version'] == version

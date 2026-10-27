@@ -16,16 +16,16 @@ if(NOT SR_DEB_ARCH_RESULT EQUAL 0 OR NOT SR_DEB_ARCH STREQUAL "amd64"
   return()
 endif()
 
-install(FILES README README.md METADATA-RULES.md BUILDING.md BUILDING-LINUX.md
-  BUILDING-WINDOWS.md CHANGELOG.md PORTING.md THIRD-PARTY.md VERSION COPYING
-  DESTINATION share/doc/streamripper COMPONENT Runtime)
+install(FILES README README.md METADATA-RULES.md
+  CHANGELOG.md PORTING.md THIRD-PARTY.md VERSION COPYING
+  DESTINATION share/doc/streamripper-ng COMPONENT Runtime)
 install(FILES rules-examples.txt
-  DESTINATION share/doc/streamripper/examples COMPONENT Runtime)
+  DESTINATION share/doc/streamripper-ng/examples COMPONENT Runtime)
 install(FILES packaging/debian/copyright
-  DESTINATION share/doc/streamripper COMPONENT Runtime)
+  DESTINATION share/doc/streamripper-ng COMPONENT Runtime)
 
 set(CPACK_GENERATOR DEB)
-set(CPACK_PACKAGE_NAME streamripper)
+set(CPACK_PACKAGE_NAME streamripper-ng)
 set(CPACK_PACKAGE_VENDOR Ashus)
 set(CPACK_PACKAGE_VERSION "${SR_RELEASE_VERSION}")
 set(CPACK_PACKAGE_CONTACT "Ashus <github.com@ashus.net>")
@@ -38,7 +38,9 @@ set(CPACK_DEB_COMPONENT_INSTALL ON)
 set(CPACK_COMPONENTS_ALL Runtime)
 set(CPACK_COMPONENT_RUNTIME_DESCRIPTION
   "Independent CLI fork with verified HTTPS and IPv6. Records MP3, AAC, Ogg Vorbis, native/Ogg FLAC and supported HLS streams, with metadata filtering and AAC silence detection.")
-set(CPACK_DEBIAN_RUNTIME_PACKAGE_NAME streamripper)
+set(CPACK_DEBIAN_RUNTIME_PACKAGE_NAME streamripper-ng)
+set(CPACK_DEBIAN_RUNTIME_PACKAGE_CONFLICTS streamripper)
+set(CPACK_DEBIAN_RUNTIME_PACKAGE_REPLACES streamripper)
 set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64)
 set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)

@@ -41,7 +41,8 @@ def package(dest):
     assert 'licenses/pcre2/COPYING' not in entries
     assert 'licenses/crt/COPYING.MinGW-w64.txt' not in entries
     assert 'parse_rules.txt' not in entries
-    for name in ('METADATA-RULES.md', 'BUILDING-WINDOWS.md', 'BUILDING-LINUX.md',
+    assert not any(Path(name).name.startswith('BUILDING') for name in entries)
+    for name in ('METADATA-RULES.md',
                  'rules-examples.txt'):
         assert name in entries
         assert (dest / name).read_bytes() == (repo / name).read_bytes()
@@ -59,18 +60,21 @@ with tempfile.TemporaryDirectory(prefix='packaging-test-', dir=repo / 'build') a
     obsolete.write_bytes(b'obsolete')
     old_rules = dest / 'parse_rules.txt'
     old_rules.write_bytes(b'old example')
+    old_build_guide = dest / 'BUILDING.md'
+    old_build_guide.write_bytes(b'old build guide')
     old_notice = dest / 'licenses/headers/ddk-readme.txt'
     old_notice.parent.mkdir(parents=True)
     old_notice.write_bytes(b'old DDK readme')
     with (dest / 'SHA256SUMS').open('a', encoding='utf-8') as manifest:
         manifest.write(hashlib.sha256(obsolete.read_bytes()).hexdigest() + '  obsolete-runtime.dll\n')
-        for old in (old_rules, old_notice):
+        for old in (old_rules, old_notice, old_build_guide):
             manifest.write(hashlib.sha256(old.read_bytes()).hexdigest() + '  ' + old.relative_to(dest).as_posix() + '\n')
     unrelated = dest / 'user-file.txt'
     unrelated.write_bytes(b'Keep this user file.')
     entries = package(dest)
     assert not obsolete.exists()
     assert not old_rules.exists() and not old_notice.exists()
+    assert not old_build_guide.exists()
     assert unrelated.read_bytes() == b'Keep this user file.'
     assert unrelated.name not in entries
     print('OK: obsolete packaged files removed; unrelated files preserved')

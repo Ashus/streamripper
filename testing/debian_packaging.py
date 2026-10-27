@@ -27,7 +27,7 @@ def main():
         environment = dict(os.environ)
         result = subprocess.run(command, cwd=root, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
-        package = output / ('streamripper_' + version + '-1_amd64.deb')
+        package = output / ('streamripper-ng_' + version + '-1_amd64.deb')
         checksum = package.with_suffix('.deb.sha256')
         assert {file.name for file in output.iterdir()} == {package.name, checksum.name}
         assert not list(build.glob('package-deb-*'))
