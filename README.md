@@ -7,11 +7,11 @@ This independent fork is maintained at [Ashus/streamripper](https://github.com/A
 Download Windows portable archives and Linux amd64 DEB packages from **[releases](https://github.com/Ashus/streamripper/releases).** On Windows, extract the whole 7z archive: the executable requires its bundled DLLs.
 
 The portable release is for Windows. Linux amd64 users can install the `.deb`
-package on systems satisfying its Debian runtime dependencies; it is built and
+`streamripper-ng` package on systems satisfying its Debian runtime dependencies; it is built and
 tested on Debian 13 Trixie. Installation, optional source builds and DEB packaging are
-covered by the complete [Linux guide](BUILDING-LINUX.md).
+covered by the complete [Linux guide](https://github.com/Ashus/streamripper/blob/master/BUILDING-LINUX.md).
 Windows toolchain setup, builds and releases have a separate
-[Windows build guide](BUILDING-WINDOWS.md).
+[Windows build guide](https://github.com/Ashus/streamripper/blob/master/BUILDING-WINDOWS.md).
 
 ## Format support
 
@@ -323,8 +323,8 @@ segment metadata are not used for the HLS/FLAC track display.
 ## Documentation
 
 - [Metadata rules, regex filtering, and track numbering](METADATA-RULES.md)
-- [Windows: building, testing, and preparing a portable release](BUILDING-WINDOWS.md)
-- [Linux: DEB installation, source builds, packaging, and testing](BUILDING-LINUX.md)
+- [Windows: building, testing, and preparing a portable release](https://github.com/Ashus/streamripper/blob/master/BUILDING-WINDOWS.md)
+- [Linux: DEB installation, source builds, packaging, and testing](https://github.com/Ashus/streamripper/blob/master/BUILDING-LINUX.md)
 - [Release history](CHANGELOG.md)
 - [Fork provenance, implementation notes, and test scope](PORTING.md)
 - [Bundled libraries, licenses, and source packages](THIRD-PARTY.md)

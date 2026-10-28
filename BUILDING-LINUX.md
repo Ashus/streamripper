@@ -7,12 +7,12 @@ The Windows workflow is documented independently in [BUILDING-WINDOWS.md](BUILDI
 
 ## Install the release DEB
 
-Download the `streamripper_<version>-1_amd64.deb` asset from
+Download the `streamripper-ng_<version>-1_amd64.deb` asset from
 [Releases](https://github.com/Ashus/streamripper/releases), replacing
 `<version>` below with the downloaded version:
 
 ```sh
-sudo apt install "./streamripper_<version>-1_amd64.deb"
+sudo apt install "./streamripper-ng_<version>-1_amd64.deb"
 streamripper --version
 ```
 
@@ -21,10 +21,15 @@ are built and tested on Debian 13 amd64. They require the library versions and
 package names listed in their `Depends` field; older Debian/Ubuntu releases or
 other architectures may need a source build. No ARM or i386 DEB is produced.
 The package installs `/usr/bin/streamripper`, guides under
-`/usr/share/doc/streamripper`, and the sample rules in its `examples` subdirectory.
-It uses the package/command name `streamripper`, replacing an older installed
-package of that name when APT upgrades it. It creates no service or recording
-directory. Remove it with `sudo apt remove streamripper`.
+`/usr/share/doc/streamripper-ng`, and the sample rules in its `examples` subdirectory.
+The package is named `streamripper-ng`; the command and application version stay
+unchanged. `Conflicts: streamripper` and `Replaces: streamripper` let APT offer
+to remove Debian's original `streamripper` package and install this fork in its
+place. Review APT's proposed removals before accepting. The package does not
+declare `Provides: streamripper`; applications using this fork should depend
+directly on `streamripper-ng` (for example, `streamripper-ng (>= 1.68.3)`).
+It creates no service or recording directory. Remove it with
+`sudo apt remove streamripper-ng`.
 
 ## Requirements and dependencies
 
@@ -119,8 +124,8 @@ and is removed on success or failure. The release directory receives only the
 completed DEB and checksum, preserving an earlier artifact if CPack fails.
 It reads the release version from `VERSION` and creates:
 
-- `build/release/streamripper_<version>-1_amd64.deb`
-- `build/release/streamripper_<version>-1_amd64.deb.sha256`
+- `build/release/streamripper-ng_<version>-1_amd64.deb`
+- `build/release/streamripper-ng_<version>-1_amd64.deb.sha256`
 
 These share the Windows archive's output directory. The `-1` is the Debian
 packaging revision; the application version still comes from `VERSION`.
@@ -146,7 +151,7 @@ the helper copies validated artifacts into the shared release directory.
 
 ```sh
 sudo apt-get install -y fakeroot
-python3 testing/debian_package.py "build/release/streamripper_$(cat VERSION)-1_amd64.deb"
+python3 testing/debian_package.py "build/release/streamripper-ng_$(cat VERSION)-1_amd64.deb"
 python3 testing/debian_packaging.py
 ```
 
@@ -154,6 +159,19 @@ The test checks metadata, generated runtime dependencies, payload, root ownershi
 permissions and checksums. It installs and removes the package with `fakeroot`
 in a disposable root, checks the executable and bundled guides, and leaves the
 host package database unchanged. It does not need `sudo`.
+
+To verify migration from the real Debian repository package, install Docker
+and enable its daemon, then run:
+
+```sh
+python3 testing/debian_package.py "build/release/streamripper-ng_$(cat VERSION)-1_amd64.deb" --apt-transition
+```
+
+This additional test starts a disposable Debian 13 container, installs the
+repository's `streamripper`, and runs `apt install ./streamripper-ng_…deb`.
+It checks replacement, ownership of `/usr/bin/streamripper`, the unchanged
+application version, and removal. It needs network access to obtain the
+container image and Debian packages; the host is not used for installation.
 
 After both OS workflows pass, manually attach the Windows `.7z`, Linux amd64
 `.deb`, and both SHA-256 files from `build/release` to the same release. The
@@ -182,6 +200,7 @@ python3 testing/aac_silence.py "$HOME/.cache/streamripper-build/streamripper" "$
 python3 testing/recording_lock.py "$HOME/.cache/streamripper-build/streamripper"
 python3 testing/live_updates.py "$HOME/.cache/streamripper-build/streamripper"
 python3 testing/terminal_width.py "$HOME/.cache/streamripper-build/streamripper"
+python3 testing/http_security.py "$HOME/.cache/streamripper-build/http_security_regression"
 python3 testing/stream_capture.py "$HOME/.cache/streamripper-build/streamripper" /usr/bin/openssl --flac flac
 python3 testing/https_smoke.py "$HOME/.cache/streamripper-build/streamripper" build/sample-5s.mp3 /usr/bin/openssl
 ```
@@ -203,6 +222,8 @@ usually reports `9p`/DrvFS and does not establish ext4 allocation behavior.
 
 Validated coverage:
 
+- Historical HTTP CVE regressions and malformed server versions; see
+  [SECURITY-REVIEW.md](SECURITY-REVIEW.md) for sanitizer commands and audit limits.
 - Five-second atomic rule reloads, invalid/missing-file retention, current-title
   reparsing, filter transitions and metadata-log deduplication.
 - Recovery after DNS, dropped connections and HTTP 503/429, Retry-After waits,

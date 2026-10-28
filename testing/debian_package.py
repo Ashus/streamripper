@@ -62,7 +62,7 @@ def main():
             else:
                 assert member.isdir(), member.name
         expected_docs = ('README', 'README.md', 'METADATA-RULES.md', 'CHANGELOG.md',
-                         'PORTING.md', 'THIRD-PARTY.md', 'COPYING', 'VERSION', 'copyright')
+                         'PORTING.md', 'SECURITY-REVIEW.md', 'THIRD-PARTY.md', 'COPYING', 'VERSION', 'copyright')
         assert 'usr/bin/streamripper' in files
         for filename in expected_docs:
             assert 'usr/share/doc/streamripper-ng/' + filename in files

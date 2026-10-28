@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.68.3
+
+### Security fixes
+
+- Prevent out-of-bounds reads from malformed SHOUTcast/Icecast versions and
+  full HTTP header buffers; add cross-platform regressions for historical HTTP
+  CVEs, oversized headers and playlist entries.
+- Fix uninitialized circular-buffer offsets during track splitting, return
+  detached MP3/Ogg buffers on receive errors, and retain failed Ogg writers for
+  cleanup. Avoid signed overflow when analyzing full-amplitude MP3 samples.
+
+### Fixes
+
+- Preserve complete Unicode track titles in status output redirected to pipes or
+  files, while continuing to shorten titles to the actual terminal width.
+- Remove trailing dots from console status labels and narrow the status field
+  to leave more room for track titles.
+- Avoid repainting unchanged console status on every data callback; refresh when
+  the displayed duration, title, status or terminal width changes.
+- Mark the current console track incomplete before printing cleanup and reconnect
+  messages after an interrupted recording.
+
+### Packaging
+
+- Name the Debian package `streamripper-ng`, with `Conflicts` and `Replaces` for
+  Debian's original `streamripper`. Keep `/usr/bin/streamripper` unchanged; use the
+  new package name for DEBs and installed guides.
+- Keep build guides in the repository instead of including them in runtime packages.
+
 ## 1.68.2
 
 ### Features

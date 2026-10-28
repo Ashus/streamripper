@@ -16,7 +16,7 @@ License: GPL-2+
  .
  On Debian systems the full GNU GPL version 2 is available in
  /usr/share/common-licenses/GPL-2. A copy is also provided in this package's
- /usr/share/doc/streamripper/COPYING.
+ /usr/share/doc/streamripper-ng/COPYING.
  .
  Runtime libraries are provided by system packages and are not bundled.
  Consult their individual copyright files under /usr/share/doc.

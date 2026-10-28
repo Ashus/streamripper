@@ -6,6 +6,10 @@ The first public release is **1.68.0**, without a feature-specific version suffi
 
 ## Reviewed forks
 
+The historical Debian HTTP security patches were also reviewed against this
+fork. See [SECURITY-REVIEW.md](SECURITY-REVIEW.md) for the CVE mapping, independent
+fixes, regression coverage and validation limits.
+
 - [Magentron / PR #7](https://github.com/streamripper/streamripper/pull/7/commits),
   revision `710c1b6d78df61a05cccdbac5e05b384e89e736a`.
   Its functional core uses the older Cbuf2 architecture, whereas this fork retains

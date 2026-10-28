@@ -145,6 +145,7 @@ python testing\live_updates.py dist\streamripper.exe
 python testing\stream_capture.py dist\streamripper.exe build\toolchain\mingw64\bin\openssl.exe
 python testing\metadata_encoding.py
 python testing\console_output.py
+python testing\http_security.py build\http_security_regression.exe
 python testing\console_close.py
 python testing\audio_headers.py
 python testing\aac_silence.py dist\streamripper.exe build\aac_silence_regression.exe --faac build\toolchain\mingw64\bin\faac.exe
@@ -161,6 +162,9 @@ python testing\wav_smoke.py dist\streamripper.exe build\core_regression.exe buil
 
 Coverage:
 
+- Historical HTTP CVE inputs, malformed server versions, exact header size
+  boundaries and oversized playlist entries. See [SECURITY-REVIEW.md](SECURITY-REVIEW.md)
+  for the instrumented Linux checks and audit limits.
 - Five-second rule reloads, atomic replacement, invalid/missing-file retention,
   current-title reparsing, filter changes and metadata-log deduplication.
 - DNS/network and HTTP 503/429 recovery, Retry-After, fatal/initial failures,
@@ -249,7 +253,7 @@ directly, so extracting it provides the executable and DLLs in one directory.
 
 For the Linux release asset, run `package-linux.py` on Debian amd64/WSL using
 the [Linux packaging guide](BUILDING-LINUX.md#build-the-amd64-deb). It writes
-`streamripper_<version>-1_amd64.deb` and its `.deb.sha256` into the same
+`streamripper-ng_<version>-1_amd64.deb` and its `.deb.sha256` into the same
 `build/release` directory. Attach both files manually to the same release;
 the Windows packaging command preserves those Linux artifacts.
 
